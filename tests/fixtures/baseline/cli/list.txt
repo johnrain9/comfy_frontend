@@ -1,0 +1,2 @@
+wan-context-2stage	image	ContextWindow2 workflow with first-pass + refine-pass generation
+wan-context-lite-2stage	image	Single 81-frame pass with high/low noise samplers and selectable LoRAs

@@ -1,0 +1,80 @@
+name: upscale-interpolate
+description: "Batch video interpolate + upscale using inline API template"
+input_type: video
+input_extensions: [.mp4, .mov, .mkv, .webm, .avi, .m4v, .mpg, .mpeg, .wmv]
+
+template_inline:
+  "1":
+    class_type: LoadVideo
+    inputs:
+      file: example.mp4
+  "2":
+    class_type: GetVideoComponents
+    inputs:
+      video: ["1", 0]
+  "3":
+    class_type: RIFE VFI
+    inputs:
+      ckpt_name: rife47.pth
+      frames: ["2", 0]
+      clear_cache_after_n_frames: 10
+      multiplier: 2
+      fast_mode: true
+      ensemble: true
+      scale_factor: 1.0
+  "4":
+    class_type: ImageScaleBy
+    inputs:
+      image: ["3", 0]
+      upscale_method: lanczos
+      scale_by: 2
+  "5":
+    class_type: CreateVideo
+    inputs:
+      images: ["4", 0]
+      audio: ["2", 1]
+      fps: 48
+  "6":
+    class_type: SaveVideo
+    inputs:
+      video: ["5", 0]
+      filename_prefix: video/upscale_interp_batch
+      format: auto
+      codec: auto
+
+file_bindings:
+  load_video:
+    nodes: ["1"]
+    field: file
+  output_prefix:
+    nodes: ["6"]
+    field: filename_prefix
+
+parameters:
+  scale_by:
+    label: "Scale by"
+    type: float
+    nodes: ["4"]
+    field: scale_by
+    default: 2
+    min: 1
+    max: 8
+  multiplier:
+    label: "Frame multiplier"
+    type: int
+    nodes: ["3"]
+    field: multiplier
+    default: 2
+    min: 1
+    max: 8
+  output_prefix:
+    label: "Output prefix"
+    type: text
+    default: "video/upscale_interp_batch"
+  flip_orientation:
+    label: "Flip orientation (swap width/height)"
+    type: bool
+    default: false
+
+switch_states: {}
+move_processed: false

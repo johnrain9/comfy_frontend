@@ -1,0 +1,69 @@
+name: wan-context-2stage
+display_name: "WAN ContextWindow2 Refine (2-pass, 81f)"
+group: "WAN V2"
+description: "ContextWindow2 workflow with first-pass + refine-pass generation"
+template: /home/cobra/ComfyUI/user/workflows/wan22_enhancedH_q5L_2stage_gguf_vertical_ctxwindow2.api.json
+input_type: image
+input_extensions: [.png, .jpg, .jpeg, .webp, .bmp]
+
+file_bindings:
+  load_image:
+    nodes: ["97"]
+    field: image
+  output_prefix:
+    nodes: ["108"]
+    field: filename_prefix
+  seed:
+    nodes: ["86", "85"]
+    fields: [noise_seed, seed]
+
+parameters:
+  positive_prompt:
+    label: "Positive prompt"
+    type: text
+    nodes: ["93"]
+    field: text
+    default: ""
+  negative_prompt:
+    label: "Negative prompt"
+    type: text
+    nodes: ["89"]
+    field: text
+    default: ""
+  randomize_seed:
+    label: "Randomize seeds"
+    type: bool
+    default: true
+  tries:
+    label: "Tries per image"
+    type: int
+    default: 1
+    min: 1
+    max: 10
+  output_prefix:
+    label: "Output prefix"
+    type: text
+    default: "video/auto_batch"
+  lora_high_name:
+    label: "LoRA high-noise"
+    type: text
+    nodes: ["101"]
+    field: lora_name
+    default: "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors"
+  lora_low_name:
+    label: "LoRA low-noise"
+    type: text
+    nodes: ["102"]
+    field: lora_name
+    default: "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors"
+  lora_strength:
+    label: "LoRA strength"
+    type: float
+    nodes: ["101", "102"]
+    field: strength_model
+    default: 1.0
+    min: 0.0
+    max: 2.0
+
+switch_states: {}
+move_processed: true

@@ -1,0 +1,148 @@
+[
+  {
+    "name": "wan-context-lite-2stage",
+    "display_name": "WAN ContextWindow Single Pass (81f)",
+    "group": "WAN V2",
+    "description": "Single 81-frame pass with high/low noise samplers and selectable LoRAs",
+    "input_type": "image",
+    "input_extensions": [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".webp",
+      ".bmp"
+    ],
+    "supports_resolution": true,
+    "parameters": {
+      "positive_prompt": {
+        "label": "Positive prompt",
+        "type": "text",
+        "default": "(at 0 second: )(at 3 second: )(at 7 second: )",
+        "min": null,
+        "max": null
+      },
+      "negative_prompt": {
+        "label": "Negative prompt",
+        "type": "text",
+        "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+        "min": null,
+        "max": null
+      },
+      "randomize_seed": {
+        "label": "Randomize seeds",
+        "type": "bool",
+        "default": true,
+        "min": null,
+        "max": null
+      },
+      "tries": {
+        "label": "Tries per image",
+        "type": "int",
+        "default": 1,
+        "min": 1,
+        "max": 10
+      },
+      "output_prefix": {
+        "label": "Output prefix",
+        "type": "text",
+        "default": "video/auto_batch",
+        "min": null,
+        "max": null
+      },
+      "lora_high_name": {
+        "label": "LoRA high-noise",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "lora_low_name": {
+        "label": "LoRA low-noise",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "lora_strength": {
+        "label": "LoRA strength",
+        "type": "float",
+        "default": 1.0,
+        "min": 0.0,
+        "max": 2.0
+      }
+    }
+  },
+  {
+    "name": "wan-context-2stage",
+    "display_name": "WAN ContextWindow2 Refine (2-pass, 81f)",
+    "group": "WAN V2",
+    "description": "ContextWindow2 workflow with first-pass + refine-pass generation",
+    "input_type": "image",
+    "input_extensions": [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".webp",
+      ".bmp"
+    ],
+    "supports_resolution": true,
+    "parameters": {
+      "positive_prompt": {
+        "label": "Positive prompt",
+        "type": "text",
+        "default": "(at 0 second: )(at 3 second: )(at 7 second: )",
+        "min": null,
+        "max": null
+      },
+      "negative_prompt": {
+        "label": "Negative prompt",
+        "type": "text",
+        "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+        "min": null,
+        "max": null
+      },
+      "randomize_seed": {
+        "label": "Randomize seeds",
+        "type": "bool",
+        "default": true,
+        "min": null,
+        "max": null
+      },
+      "tries": {
+        "label": "Tries per image",
+        "type": "int",
+        "default": 1,
+        "min": 1,
+        "max": 10
+      },
+      "output_prefix": {
+        "label": "Output prefix",
+        "type": "text",
+        "default": "video/auto_batch",
+        "min": null,
+        "max": null
+      },
+      "lora_high_name": {
+        "label": "LoRA high-noise",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "lora_low_name": {
+        "label": "LoRA low-noise",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "lora_strength": {
+        "label": "LoRA strength",
+        "type": "float",
+        "default": 1.0,
+        "min": 0.0,
+        "max": 2.0
+      }
+    }
+  }
+]

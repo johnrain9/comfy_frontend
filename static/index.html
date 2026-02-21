@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Comfy Queue</title>
+  <style>
+    :root {
+      --bg: #111418;
+      --panel: #1a1f26;
+      --line: #2c3440;
+      --text: #d7dde7;
+      --muted: #8f9aac;
+      --ok: #2ecc71;
+      --bad: #ff5b5b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", sans-serif; background: linear-gradient(160deg, #12151b, #0e1116 60%); color: var(--text); }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .bar, .panel { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+    .bar { display: flex; gap: 14px; align-items: center; padding: 12px 14px; margin-bottom: 14px; flex-wrap: wrap; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .ok { background: var(--ok); }
+    .bad { background: var(--bad); }
+    .panel { padding: 14px; margin-bottom: 14px; }
+    label { display: block; margin: 8px 0 4px; color: var(--muted); font-size: 13px; }
+    input, textarea, select, button { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #11161d; color: var(--text); padding: 8px; }
+    textarea { min-height: 74px; }
+    button { cursor: pointer; background: #1f2732; }
+    .btn { width: auto; padding: 8px 12px; }
+    .row { display: grid; gap: 10px; }
+    .row-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+    .table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; font-size: 13px; }
+    .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; }
+    .s-pending { background: #3a3f4b; }
+    .s-running { background: #234766; }
+    .s-succeeded { background: #22462f; }
+    .s-failed { background: #5a2d2d; }
+    .s-canceled { background: #5a4b2d; }
+    .actions button { width: auto; margin-right: 6px; }
+    details { margin: 8px 0; }
+    pre { white-space: pre-wrap; background: #0d1117; padding: 10px; border-radius: 8px; border: 1px solid var(--line); max-height: 260px; overflow: auto; }
+    .inline { display: flex; gap: 8px; align-items: center; }
+    .input-with-btn { display: flex; gap: 8px; align-items: center; }
+    .input-with-btn input { flex: 1; }
+    .browse-btn { width: auto; white-space: nowrap; }
+    .hint { color: var(--muted); font-size: 12px; }
+    .submit-actions { display: flex; gap: 8px; align-items: center; }
+    .submit-actions .btn { width: auto; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+    .tab-btn { width: auto; padding: 8px 12px; border-radius: 999px; }
+    .tab-btn.active { background: #2a3b52; border-color: #4f6787; }
+    .hidden { display: none !important; }
+    .prompt-list { display: grid; gap: 8px; }
+    .prompt-card { border: 1px solid var(--line); border-radius: 8px; background: #121820; padding: 8px; }
+    .prompt-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    @media (max-width: 780px) { .row-2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="bar">
+      <div id="comfyStatus"><span class="dot bad"></span>ComfyUI: unknown</div>
+      <div id="workerStatus">Worker: unknown</div>
+      <div id="queueCounts">pending=0 running=0</div>
+      <button id="pauseBtn" class="btn">Pause</button>
+      <button id="resumeBtn" class="btn">Resume</button>
+      <button id="reloadWorkflowsBtn" class="btn">Reload Workflows</button>
+      <button id="reloadLorasBtn" class="btn">Reload LoRAs</button>
+    </div>
+
+    <div class="panel">
+      <h3>Submit Job</h3>
+      <div class="tabs">
+        <button id="tabBatch" type="button" class="tab-btn active">Batch</button>
+        <button id="tabSingle" type="button" class="tab-btn">Single I2V</button>
+      </div>
+      <div class="row">
+        <div>
+          <label>Workflow</label>
+          <select id="workflowSelect"></select>
+        </div>
+
+        <div class="row-2">
+          <div>
+            <label>Resolution Preset</label>
+            <select id="resolutionPreset"></select>
+          </div>
+          <div>
+            <label>Orientation</label>
+            <div class="inline" style="padding-top:8px;">
+              <input id="flipOrientation" type="checkbox" style="width:auto;" />
+              <span>Flip orientation (swap width/height)</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="batchInputSection">
+          <label>Input Directory</label>
+          <div class="input-with-btn">
+            <input id="inputDir" list="inputDirHistory" placeholder="/home/cobra/ComfyUI/input/my_batch" />
+            <button id="inputBrowseBtn" type="button" class="btn browse-btn">Browse...</button>
+          </div>
+          <datalist id="inputDirHistory"></datalist>
+          <div class="hint">Accepts Linux absolute paths and pasted Windows/\\wsl.localhost paths.</div>
+          <div id="defaultInputDirNotice" class="hint"></div>
+        </div>
+
+        <div id="singleInputSection" class="hidden">
+          <label>Input Image</label>
+          <div class="input-with-btn">
+            <input id="inputImage" placeholder="/home/cobra/ComfyUI/input/example.png" />
+            <button id="inputImageBrowseBtn" type="button" class="btn browse-btn">Browse...</button>
+          </div>
+          <div class="hint">Select exactly one image for single I2V job submission.</div>
+        </div>
+
+        <div id="paramFields"></div>
+        <div class="submit-actions">
+          <button id="submitBtn">Submit</button>
+          <button id="resetSavedBtn" type="button" class="btn">Reset Saved Options</button>
+        </div>
+      </div>
+      <div id="submitMsg"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Queue</h3>
+      <table class="table" id="jobsTable">
+        <thead>
+          <tr>
+            <th>ID</th><th>Workflow</th><th>Input Dir</th><th>Status</th><th>Created</th><th>Elapsed</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+let workflows = [];
+let workflowMap = {};
+let loraChoices = [];
+let resolutionPresets = [];
+let recentInputDirs = [];
+let lastJobsSig = '';
+let lastHealthSig = '';
+let refreshJobsBusy = false;
+let refreshHealthBusy = false;
+let currentWorkflowName = '';
+let activeTab = 'batch';
+let defaultBatchInputDir = '/home/cobra/ComfyUI/input';
+let defaultBatchInputExists = true;
+
+const WAN_POSITIVE_TEMPLATE = '(at 0 second: )(at 3 second: )(at 7 second: )';
+const UI_STATE_KEY = 'video_queue_ui_state_v1';
+const UI_STATE_VERSION = 1;
+
+function defaultUiState() {
+  return {
+    version: UI_STATE_VERSION,
+    global: {
+      workflow_name: '',
+      resolution_preset: '',
+      flip_orientation: false,
+      input_dir: '',
+      single_image: '',
+      active_tab: 'batch'
+    },
+    workflow_params: {}
+  };
+}
+
+let uiState = defaultUiState();
+
+function storageAvailable() {
+  try {
+    if (!window.localStorage) return false;
+    const key = '__vq_test__';
+    window.localStorage.setItem(key, '1');
+    window.localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clampNumber(value, min, max) {
+  let out = value;
+  if (min !== null && min !== undefined && out < Number(min)) out = Number(min);
+  if (max !== null && max !== undefined && out > Number(max)) out = Number(max);
+  return out;
+}
+
+function coerceStoredParam(value, paramDef) {
+  if (!paramDef) return null;
+  const type = String(paramDef.type || '');
+
+  if (type === 'bool') {
+    if (typeof value === 'string') {
+      const lower = value.trim().toLowerCase();
+      if (['false', '0', 'off', 'no', 'n', ''].includes(lower)) return false;
+      if (['true', '1', 'on', 'yes', 'y'].includes(lower)) return true;
+    }
+    return !!value;
+  }
+  if (type === 'int') {
+    const n = parseInt(String(value ?? ''), 10);
+    if (!Number.isFinite(n)) return null;
+    return clampNumber(n, paramDef.min, paramDef.max);
+  }
+  if (type === 'float') {
+    const n = parseFloat(String(value ?? ''));
+    if (!Number.isFinite(n)) return null;
+    return clampNumber(n, paramDef.min, paramDef.max);
+  }
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function loadUiState() {
+  if (!storageAvailable()) {
+    uiState = defaultUiState();
+    return;
+  }
+  try {
+    const raw = window.localStorage.getItem(UI_STATE_KEY);
+    if (!raw) {
+      uiState = defaultUiState();
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      uiState = defaultUiState();
+      return;
+    }
+
+    const next = defaultUiState();
+    if (parsed.version === UI_STATE_VERSION) {
+      if (parsed.global && typeof parsed.global === 'object') {
+        next.global.workflow_name = typeof parsed.global.workflow_name === 'string' ? parsed.global.workflow_name : '';
+        next.global.resolution_preset = typeof parsed.global.resolution_preset === 'string' ? parsed.global.resolution_preset : '';
+        next.global.flip_orientation = !!parsed.global.flip_orientation;
+        next.global.input_dir = typeof parsed.global.input_dir === 'string' ? parsed.global.input_dir : '';
+        next.global.single_image = typeof parsed.global.single_image === 'string' ? parsed.global.single_image : '';
+        next.global.active_tab = parsed.global.active_tab === 'single' ? 'single' : 'batch';
+      }
+      if (parsed.workflow_params && typeof parsed.workflow_params === 'object') {
+        for (const [wfName, wfParams] of Object.entries(parsed.workflow_params)) {
+          if (!wfName || typeof wfName !== 'string') continue;
+          if (!wfParams || typeof wfParams !== 'object') continue;
+          next.workflow_params[wfName] = wfParams;
+        }
+      }
+    }
+    uiState = next;
+  } catch {
+    uiState = defaultUiState();
+  }
+}
+
+function saveUiState() {
+  if (!storageAvailable()) return;
+  try {
+    const payload = JSON.stringify(uiState);
+    window.localStorage.setItem(UI_STATE_KEY, payload);
+  } catch {
+    // Ignore storage errors to keep UI usable.
+  }
+}
+
+function clearUiState() {
+  uiState = defaultUiState();
+  if (!storageAvailable()) return;
+  try {
+    window.localStorage.removeItem(UI_STATE_KEY);
+  } catch {
+    // Ignore storage errors to keep UI usable.
+  }
+}
+
+function esc(v){ return String(v ?? ''); }
+
+function elapsed(created, finished) {
+  if (!created) return '-';
+  const a = new Date(created).getTime();
+  const b = finished ? new Date(finished).getTime() : Date.now();
+  const s = Math.max(0, Math.floor((b - a) / 1000));
+  const m = Math.floor(s / 60);
+  return `${m}m ${s % 60}s`;
+}
+
+async function jfetch(url, opts={}) {
+  const r = await fetch(url, opts);
+  const text = await r.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = text; }
+  if (!r.ok) throw new Error(typeof data === 'string' ? data : (data.detail || text));
+  return data;
+}
+
+function workflowLabel(wf) {
+  if (!wf) return '';
+  const display = wf.display_name || wf.name;
+  const group = wf.group ? `[${wf.group}] ` : '';
+  return `${group}${display} - ${wf.description || ''}`.trim();
+}
+
+function buildLoraSelect(defaultValue) {
+  const sel = document.createElement('select');
+  const unique = [];
+  const seen = new Set();
+  const values = [''].concat(defaultValue || '').concat(loraChoices || []);
+
+  for (const value of values) {
+    const name = String(value || '');
+    if (seen.has(name)) continue;
+    seen.add(name);
+    unique.push(name);
+  }
+
+  for (const name of unique) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name || '(empty)';
+    sel.appendChild(opt);
+  }
+
+  sel.value = String(defaultValue || '');
+  return sel;
+}
+
+function renderResolutionPresets() {
+  const sel = document.getElementById('resolutionPreset');
+  const existing = sel.value;
+  sel.innerHTML = '';
+  for (const item of resolutionPresets) {
+    const opt = document.createElement('option');
+    opt.value = item.id;
+    opt.textContent = item.label || item.id;
+    sel.appendChild(opt);
+  }
+  if (existing && [...sel.options].some(o => o.value === existing)) {
+    sel.value = existing;
+  } else if (sel.options.length > 0) {
+    sel.selectedIndex = 0;
+  }
+}
+
+function updateResolutionControlsForWorkflow() {
+  const wf = workflowMap[document.getElementById('workflowSelect').value];
+  const supports = !!(wf && wf.supports_resolution);
+  const preset = document.getElementById('resolutionPreset');
+  const flip = document.getElementById('flipOrientation');
+  preset.disabled = !supports;
+  flip.disabled = !supports;
+}
+
+function renderInputDirHistory() {
+  const list = document.getElementById('inputDirHistory');
+  list.innerHTML = '';
+  for (const path of recentInputDirs) {
+    const opt = document.createElement('option');
+    opt.value = path;
+    list.appendChild(opt);
+  }
+}
+
+function setActiveTab(tabName, persist=true) {
+  const next = tabName === 'single' ? 'single' : 'batch';
+  activeTab = next;
+  const isSingle = activeTab === 'single';
+
+  document.getElementById('batchInputSection').classList.toggle('hidden', isSingle);
+  document.getElementById('singleInputSection').classList.toggle('hidden', !isSingle);
+  document.getElementById('tabBatch').classList.toggle('active', !isSingle);
+  document.getElementById('tabSingle').classList.toggle('active', isSingle);
+
+  if (persist) {
+    uiState.global.active_tab = activeTab;
+    saveUiState();
+  }
+}
+
+function readParamsFromForm() {
+  const params = {};
+  document.querySelectorAll('#paramFields [data-param-name]').forEach(el => {
+    const n = el.dataset.paramName;
+    const t = el.dataset.paramType;
+    if (!n) return;
+    if (t === 'bool') params[n] = !!el.checked;
+    else if (t === 'int') params[n] = parseInt(el.value || '0', 10);
+    else if (t === 'float') params[n] = parseFloat(el.value || '0');
+    else params[n] = String(el.value ?? '');
+  });
+  return params;
+}
+
+function saveCurrentWorkflowParams() {
+  const wfName = currentWorkflowName || document.getElementById('workflowSelect').value;
+  if (!wfName) return;
+  uiState.workflow_params[wfName] = readParamsFromForm();
+  saveUiState();
+}
+
+function syncGlobalStateFromForm() {
+  const workflow = document.getElementById('workflowSelect').value;
+  const resolution = document.getElementById('resolutionPreset').value;
+  const flip = !!document.getElementById('flipOrientation').checked;
+  const inputDir = document.getElementById('inputDir').value.trim();
+  const inputImage = document.getElementById('inputImage').value.trim();
+
+  uiState.global.workflow_name = workflow || '';
+  uiState.global.resolution_preset = resolution || '';
+  uiState.global.flip_orientation = flip;
+  uiState.global.input_dir = inputDir;
+  uiState.global.single_image = inputImage;
+  uiState.global.active_tab = activeTab;
+  saveUiState();
+}
+
+function applySavedGlobalState() {
+  const resolution = document.getElementById('resolutionPreset');
+  const flip = document.getElementById('flipOrientation');
+  const input = document.getElementById('inputDir');
+  const image = document.getElementById('inputImage');
+
+  const preset = String(uiState.global.resolution_preset || '');
+  if (preset && [...resolution.options].some(opt => opt.value === preset)) {
+    resolution.value = preset;
+  }
+  flip.checked = !!uiState.global.flip_orientation;
+  if (uiState.global.input_dir) input.value = uiState.global.input_dir;
+  else input.value = defaultBatchInputDir || '';
+  if (uiState.global.single_image) image.value = uiState.global.single_image;
+  setActiveTab(uiState.global.active_tab === 'single' ? 'single' : 'batch', false);
+}
+
+function resetSavedOptions() {
+  clearUiState();
+  const msg = document.getElementById('submitMsg');
+  const workflowSelect = document.getElementById('workflowSelect');
+  const resolution = document.getElementById('resolutionPreset');
+  const input = document.getElementById('inputDir');
+  const image = document.getElementById('inputImage');
+  const flip = document.getElementById('flipOrientation');
+
+  if (workflowSelect.options.length > 0) workflowSelect.selectedIndex = 0;
+  if (resolution.options.length > 0) resolution.selectedIndex = 0;
+  input.value = defaultBatchInputDir || '';
+  image.value = '';
+  flip.checked = false;
+  setActiveTab('batch', false);
+  currentWorkflowName = workflowSelect.value || '';
+  renderParamFields();
+  syncGlobalStateFromForm();
+  msg.textContent = 'Saved options cleared.';
+}
+
+function renderParamFields() {
+  const sel = document.getElementById('workflowSelect').value;
+  const wf = workflowMap[sel];
+  const box = document.getElementById('paramFields');
+  box.innerHTML = '';
+  if (!wf) return;
+  currentWorkflowName = wf.name;
+  const savedParams = (uiState.workflow_params && typeof uiState.workflow_params[wf.name] === 'object')
+    ? uiState.workflow_params[wf.name]
+    : {};
+
+  for (const [name, p] of Object.entries(wf.parameters || {})) {
+    const wrap = document.createElement('div');
+    const label = document.createElement('label');
+    label.textContent = p.label || name;
+    wrap.appendChild(label);
+
+    let defaultValue = p.default;
+    if ((defaultValue === null || defaultValue === undefined || defaultValue === '') && name === 'positive_prompt' && /^wan-/.test(wf.name || '')) {
+      defaultValue = WAN_POSITIVE_TEMPLATE;
+    }
+    const saved = Object.prototype.hasOwnProperty.call(savedParams, name) ? savedParams[name] : undefined;
+    const restored = saved === undefined ? null : coerceStoredParam(saved, p);
+    const fieldValue = restored === null ? defaultValue : restored;
+
+    let el;
+    if (p.type === 'bool') {
+      el = document.createElement('input');
+      el.type = 'checkbox';
+      el.checked = !!fieldValue;
+      el.style.width = 'auto';
+      const row = document.createElement('div');
+      row.className = 'inline';
+      row.appendChild(el);
+      const t = document.createElement('span');
+      t.textContent = name;
+      row.appendChild(t);
+      wrap.appendChild(row);
+    } else if (p.type === 'text' && /lora/i.test(name)) {
+      el = buildLoraSelect(fieldValue);
+      wrap.appendChild(el);
+    } else if (p.type === 'text' && /prompt/i.test(name)) {
+      el = document.createElement('textarea');
+      el.value = fieldValue ?? '';
+      wrap.appendChild(el);
+    } else {
+      el = document.createElement('input');
+      el.type = (p.type === 'int' || p.type === 'float') ? 'number' : 'text';
+      if (p.min !== null && p.min !== undefined) el.min = p.min;
+      if (p.max !== null && p.max !== undefined) el.max = p.max;
+      el.value = fieldValue ?? '';
+      wrap.appendChild(el);
+    }
+    el.dataset.paramName = name;
+    el.dataset.paramType = p.type;
+    const persistParam = () => saveCurrentWorkflowParams();
+    el.addEventListener('change', persistParam);
+    el.addEventListener('input', persistParam);
+    box.appendChild(wrap);
+  }
+
+  saveCurrentWorkflowParams();
+  updateResolutionControlsForWorkflow();
+}
+
+async function normalizeInputDirField() {
+  const input = document.getElementById('inputDir');
+  const msg = document.getElementById('submitMsg');
+  const raw = input.value.trim();
+  if (!raw) return '';
+
+  try {
+    const data = await jfetch('/api/input-dirs/normalize', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ path: raw })
+    });
+    const normalized = data.normalized_path || raw;
+    input.value = normalized;
+    syncGlobalStateFromForm();
+    return normalized;
+  } catch (e) {
+    msg.textContent = `Path error: ${e.message}`;
+    throw e;
+  }
+}
+
+async function normalizeInputImageField() {
+  const input = document.getElementById('inputImage');
+  const msg = document.getElementById('submitMsg');
+  const raw = input.value.trim();
+  if (!raw) return '';
+
+  try {
+    const data = await jfetch('/api/input-dirs/normalize', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ path: raw })
+    });
+    const normalized = data.normalized_path || raw;
+    input.value = normalized;
+    syncGlobalStateFromForm();
+    return normalized;
+  } catch (e) {
+    msg.textContent = `Path error: ${e.message}`;
+    throw e;
+  }
+}
+
+async function loadLoras() {
+  try {
+    const data = await jfetch('/api/loras');
+    loraChoices = Array.isArray(data) ? data : [];
+  } catch {
+    loraChoices = [];
+  }
+}
+
+async function loadResolutionPresets() {
+  try {
+    const data = await jfetch('/api/resolution-presets');
+    resolutionPresets = Array.isArray(data.presets) ? data.presets : [];
+  } catch {
+    resolutionPresets = [];
+  }
+  renderResolutionPresets();
+}
+
+async function loadRecentInputDirs() {
+  try {
+    const data = await jfetch('/api/input-dirs/recent?limit=20');
+    recentInputDirs = Array.isArray(data.paths) ? data.paths : [];
+  } catch {
+    recentInputDirs = [];
+  }
+  renderInputDirHistory();
+}
+
+async function loadDefaultInputDir() {
+  const notice = document.getElementById('defaultInputDirNotice');
+  notice.textContent = '';
+  try {
+    const data = await jfetch('/api/input-dirs/default');
+    const candidate = String(data.default_path || '').trim();
+    defaultBatchInputDir = candidate || defaultBatchInputDir;
+    defaultBatchInputExists = !!data.exists;
+  } catch {
+    defaultBatchInputDir = '/home/cobra/ComfyUI/input';
+    defaultBatchInputExists = true;
+  }
+
+  if (!defaultBatchInputExists) {
+    notice.textContent = `Default input directory is unavailable: ${defaultBatchInputDir}. Enter another directory or use Browse.`;
+  }
+}
+
+async function loadWorkflows(preferredName) {
+  workflows = await jfetch('/api/workflows');
+  workflowMap = Object.fromEntries(workflows.map(w => [w.name, w]));
+  const sel = document.getElementById('workflowSelect');
+  const fallback = preferredName || uiState.global.workflow_name || sel.value;
+  sel.innerHTML = '';
+  for (const wf of workflows) {
+    const opt = document.createElement('option');
+    opt.value = wf.name;
+    opt.textContent = workflowLabel(wf);
+    sel.appendChild(opt);
+  }
+  if (fallback && workflowMap[fallback]) {
+    sel.value = fallback;
+  }
+  currentWorkflowName = sel.value || '';
+  renderParamFields();
+  applySavedGlobalState();
+  syncGlobalStateFromForm();
+  lastJobsSig = '';
+}
+
+async function reloadWorkflowsFromUI() {
+  const msg = document.getElementById('submitMsg');
+  const btn = document.getElementById('reloadWorkflowsBtn');
+  saveCurrentWorkflowParams();
+  syncGlobalStateFromForm();
+  const current = document.getElementById('workflowSelect').value;
+  const previous = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Reloading...';
+  try {
+    const data = await jfetch('/api/reload/workflows', { method: 'POST' });
+    await loadWorkflows(current);
+    msg.textContent = `Reloaded workflows (${data.count})`;
+  } catch (e) {
+    msg.textContent = `Workflow reload error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = previous;
+  }
+}
+
+async function reloadLorasFromUI() {
+  const msg = document.getElementById('submitMsg');
+  const btn = document.getElementById('reloadLorasBtn');
+  const previous = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Reloading...';
+  try {
+    const data = await jfetch('/api/reload/loras', { method: 'POST' });
+    loraChoices = Array.isArray(data.loras) ? data.loras : [];
+    renderParamFields();
+    msg.textContent = `Reloaded LoRAs (${data.count})`;
+  } catch (e) {
+    msg.textContent = `LoRA reload error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = previous;
+  }
+}
+
+async function submitJob() {
+  const msg = document.getElementById('submitMsg');
+  msg.textContent = '';
+
+  const workflow_name = document.getElementById('workflowSelect').value;
+  const wf = workflowMap[workflow_name];
+  const supportsResolution = !!(wf && wf.supports_resolution);
+  const resolutionPreset = document.getElementById('resolutionPreset').value;
+  const flipOrientation = !!document.getElementById('flipOrientation').checked;
+
+  const params = readParamsFromForm();
+  uiState.workflow_params[workflow_name] = params;
+  syncGlobalStateFromForm();
+
+  let pathPayload = {};
+  let endpoint = '/api/jobs';
+  if (activeTab === 'single') {
+    let input_image;
+    try {
+      input_image = await normalizeInputImageField();
+    } catch {
+      return;
+    }
+    if (!input_image) {
+      msg.textContent = 'Single I2V requires one input image.';
+      return;
+    }
+    endpoint = '/api/jobs/single';
+    pathPayload = { input_image };
+  } else {
+    let input_dir;
+    try {
+      input_dir = await normalizeInputDirField();
+    } catch {
+      return;
+    }
+    pathPayload = { input_dir };
+  }
+
+  try {
+    const data = await jfetch(endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        workflow_name,
+        ...pathPayload,
+        params,
+        resolution_preset: supportsResolution ? resolutionPreset : null,
+        flip_orientation: supportsResolution ? flipOrientation : false
+      })
+    });
+    msg.textContent = `Submitted job ${data.job_id}`;
+    lastJobsSig = '';
+    await loadRecentInputDirs();
+    await refreshJobs();
+  } catch (e) {
+    msg.textContent = `Error: ${e.message}`;
+  }
+}
+
+async function browseInputDir() {
+  const btn = document.getElementById('inputBrowseBtn');
+  const input = document.getElementById('inputDir');
+  const msg = document.getElementById('submitMsg');
+  const previousLabel = btn.textContent;
+
+  btn.disabled = true;
+  btn.textContent = 'Picking...';
+  try {
+    const current = input.value.trim() || defaultBatchInputDir;
+    const data = await jfetch('/api/pick-directory', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ start_dir: current || null })
+    });
+    input.value = data.path || '';
+    if (data.path) {
+      msg.textContent = `Selected: ${data.path}`;
+      syncGlobalStateFromForm();
+    }
+  } catch (e) {
+    msg.textContent = `Browse error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = previousLabel;
+  }
+}
+
+async function browseInputImage() {
+  const btn = document.getElementById('inputImageBrowseBtn');
+  const input = document.getElementById('inputImage');
+  const msg = document.getElementById('submitMsg');
+  const previousLabel = btn.textContent;
+
+  btn.disabled = true;
+  btn.textContent = 'Picking...';
+  try {
+    const current = input.value.trim();
+    const data = await jfetch('/api/pick-image', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ start_path: current || null })
+    });
+    input.value = data.path || '';
+    if (data.path) {
+      msg.textContent = `Selected image: ${data.path}`;
+      syncGlobalStateFromForm();
+    }
+  } catch (e) {
+    msg.textContent = `Image browse error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = previousLabel;
+  }
+}
+
+function statusBadge(status) {
+  return `<span class="badge s-${status}">${status}</span>`;
+}
+
+async function jobAction(jobId, action) {
+  const data = await jfetch(`/api/jobs/${jobId}/${action}`, { method: 'POST' });
+  const msg = document.getElementById('submitMsg');
+  if (action === 'cancel') {
+    const c = data.cancel_summary || {};
+    const running = Number(c.running_prompts || 0);
+    const canceledPending = Number(c.canceled_pending || 0);
+    if (running > 0) {
+      msg.textContent = `Cancel requested for job ${jobId}: canceled ${canceledPending} pending prompt(s), waiting for ${running} running prompt(s).`;
+    } else {
+      msg.textContent = `Canceled job ${jobId}: canceled ${canceledPending} pending prompt(s).`;
+    }
+  }
+  if (action === 'retry') {
+    msg.textContent = `Retried job ${jobId}.`;
+  }
+  lastJobsSig = '';
+  await refreshJobs();
+}
+
+async function loadJobDetail(jobId, detailsEl) {
+  const body = detailsEl.querySelector('[data-detail-body]');
+  if (!body) return;
+
+  body.innerHTML = 'Loading...';
+  try {
+    const detail = await jfetch(`/api/jobs/${jobId}`);
+    const prompts = Array.isArray(detail.prompts) ? detail.prompts : [];
+    body.innerHTML = '';
+
+    const list = document.createElement('div');
+    list.className = 'prompt-list';
+
+    for (const p of prompts) {
+      const card = document.createElement('div');
+      card.className = 'prompt-card';
+
+      const header = document.createElement('div');
+      const comfyPromptId = p.prompt_id ? String(p.prompt_id) : '-';
+      header.innerHTML = `<strong>Prompt Row ${esc(p.id)}</strong> | ${statusBadge(esc(p.status || 'unknown'))}`;
+      card.appendChild(header);
+
+      const meta = document.createElement('div');
+      meta.className = 'prompt-meta';
+      meta.textContent = `Comfy prompt_id: ${comfyPromptId}`;
+      card.appendChild(meta);
+
+      const file = document.createElement('div');
+      file.className = 'prompt-meta';
+      file.textContent = `Input: ${esc(p.input_file || '-')}`;
+      card.appendChild(file);
+
+      if (p.output_paths) {
+        const out = document.createElement('div');
+        out.className = 'prompt-meta';
+        out.textContent = `Outputs: ${esc(p.output_paths)}`;
+        card.appendChild(out);
+      }
+      if (p.error_detail) {
+        const err = document.createElement('div');
+        err.className = 'prompt-meta';
+        err.textContent = `Error: ${esc(p.error_detail)}`;
+        card.appendChild(err);
+      }
+
+      const payloadDetails = document.createElement('details');
+      const payloadSummary = document.createElement('summary');
+      payloadSummary.textContent = 'Prompt JSON';
+      payloadDetails.appendChild(payloadSummary);
+      const payloadPre = document.createElement('pre');
+      let rendered = String(p.prompt_json || '');
+      try {
+        rendered = JSON.stringify(JSON.parse(rendered), null, 2);
+      } catch {
+        // Keep raw payload when not valid JSON.
+      }
+      payloadPre.textContent = rendered;
+      payloadDetails.appendChild(payloadPre);
+      card.appendChild(payloadDetails);
+
+      list.appendChild(card);
+    }
+
+    const summary = document.createElement('div');
+    summary.className = 'prompt-meta';
+    summary.textContent = `Job ID: ${jobId} | Prompt rows: ${prompts.length}`;
+    body.appendChild(summary);
+    body.appendChild(list);
+  } catch (e) {
+    body.textContent = `Error loading detail: ${e.message}`;
+  }
+}
+
+function computeJobsSig(jobs) {
+  const compact = jobs.map(j => [j.id, j.status, j.prompt_count, j.created_at, j.finished_at]);
+  return JSON.stringify(compact);
+}
+
+async function refreshJobs() {
+  if (refreshJobsBusy) return;
+  refreshJobsBusy = true;
+  try {
+    const jobs = await jfetch('/api/jobs');
+    const sig = computeJobsSig(jobs);
+    if (sig === lastJobsSig) return;
+    lastJobsSig = sig;
+
+    const tbody = document.querySelector('#jobsTable tbody');
+    tbody.innerHTML = '';
+
+    for (const job of jobs) {
+      const wf = workflowMap[job.workflow_name];
+      const wfLabel = wf ? (wf.display_name || job.workflow_name) : job.workflow_name;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${job.id}</td>
+        <td>${esc(wfLabel)}</td>
+        <td>${esc(job.input_dir)}</td>
+        <td>${statusBadge(job.status)}</td>
+        <td>${esc(job.created_at || '-')}</td>
+        <td>${elapsed(job.created_at, job.finished_at)}</td>
+        <td class="actions">
+          <button data-cancel="${job.id}">Cancel</button>
+          <button data-retry="${job.id}">Retry</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+
+      const dtr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 7;
+
+      const details = document.createElement('details');
+      const sum = document.createElement('summary');
+      sum.textContent = `Job ${job.id} Prompts (${job.prompt_count ?? 0})`;
+      details.appendChild(sum);
+
+      const detailBody = document.createElement('div');
+      detailBody.setAttribute('data-detail-body', '1');
+      detailBody.textContent = 'Open to load details.';
+      details.appendChild(detailBody);
+
+      let loaded = false;
+      details.addEventListener('toggle', () => {
+        if (details.open && !loaded) {
+          loaded = true;
+          loadJobDetail(job.id, details);
+        }
+      });
+
+      td.appendChild(details);
+      dtr.appendChild(td);
+      tbody.appendChild(dtr);
+    }
+
+    document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => jobAction(b.dataset.cancel, 'cancel'));
+    document.querySelectorAll('[data-retry]').forEach(b => b.onclick = () => jobAction(b.dataset.retry, 'retry'));
+  } finally {
+    refreshJobsBusy = false;
+  }
+}
+
+function computeHealthSig(h) {
+  return JSON.stringify([h.comfy, h.worker, h.pending, h.running]);
+}
+
+async function refreshHealth() {
+  if (refreshHealthBusy) return;
+  refreshHealthBusy = true;
+  try {
+    const h = await jfetch('/api/health');
+    const sig = computeHealthSig(h);
+    if (sig === lastHealthSig) return;
+    lastHealthSig = sig;
+
+    document.getElementById('comfyStatus').innerHTML = `<span class="dot ${h.comfy ? 'ok' : 'bad'}"></span>ComfyUI: ${h.comfy ? 'up' : 'down'}`;
+    document.getElementById('workerStatus').textContent = `Worker: ${h.worker}`;
+    document.getElementById('queueCounts').textContent = `pending=${h.pending} running=${h.running}`;
+  } finally {
+    refreshHealthBusy = false;
+  }
+}
+
+document.getElementById('workflowSelect').addEventListener('change', () => {
+  saveCurrentWorkflowParams();
+  currentWorkflowName = document.getElementById('workflowSelect').value || '';
+  renderParamFields();
+  syncGlobalStateFromForm();
+});
+document.getElementById('submitBtn').addEventListener('click', submitJob);
+document.getElementById('resetSavedBtn').addEventListener('click', resetSavedOptions);
+document.getElementById('inputBrowseBtn').addEventListener('click', browseInputDir);
+document.getElementById('inputImageBrowseBtn').addEventListener('click', browseInputImage);
+document.getElementById('tabBatch').addEventListener('click', () => {
+  setActiveTab('batch');
+  syncGlobalStateFromForm();
+});
+document.getElementById('tabSingle').addEventListener('click', () => {
+  setActiveTab('single');
+  syncGlobalStateFromForm();
+});
+document.getElementById('inputDir').addEventListener('input', syncGlobalStateFromForm);
+document.getElementById('inputDir').addEventListener('blur', () => { normalizeInputDirField().catch(() => {}); });
+document.getElementById('inputImage').addEventListener('input', syncGlobalStateFromForm);
+document.getElementById('inputImage').addEventListener('blur', () => { normalizeInputImageField().catch(() => {}); });
+document.getElementById('resolutionPreset').addEventListener('change', syncGlobalStateFromForm);
+document.getElementById('flipOrientation').addEventListener('change', syncGlobalStateFromForm);
+document.getElementById('pauseBtn').addEventListener('click', () => jfetch('/api/queue/pause', {method:'POST'}).then(() => { lastHealthSig = ''; return refreshHealth(); }));
+document.getElementById('resumeBtn').addEventListener('click', () => jfetch('/api/queue/resume', {method:'POST'}).then(() => { lastHealthSig = ''; return refreshHealth(); }));
+document.getElementById('reloadWorkflowsBtn').addEventListener('click', reloadWorkflowsFromUI);
+document.getElementById('reloadLorasBtn').addEventListener('click', reloadLorasFromUI);
+
+(async function init() {
+  loadUiState();
+  await loadLoras();
+  await loadResolutionPresets();
+  await loadRecentInputDirs();
+  await loadDefaultInputDir();
+  await loadWorkflows();
+  await refreshHealth();
+  await refreshJobs();
+  setInterval(refreshHealth, 5000);
+  setInterval(refreshJobs, 3000);
+})();
+</script>
+</body>
+</html>
