@@ -55,12 +55,32 @@
     .prompt-list { display: grid; gap: 8px; }
     .prompt-card { border: 1px solid var(--line); border-radius: 8px; background: #121820; padding: 8px; }
     .prompt-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .drop-zone {
+      border: 1px dashed #4a5a70;
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 8px;
+      color: var(--muted);
+      background: #10161f;
+      text-align: center;
+      font-size: 12px;
+    }
+    .drop-zone.active {
+      border-color: #6f8fb7;
+      background: #132033;
+      color: #d5e5ff;
+    }
     @media (max-width: 780px) { .row-2 { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="bar">
+      <select id="settingsPresetSelect" style="width:auto; min-width:220px;">
+        <option value="">Settings Preset: (none)</option>
+      </select>
+      <input id="settingsPresetName" placeholder="Settings preset name" style="width:auto; min-width:220px;" />
+      <button id="saveSettingsPresetBtn" class="btn">Save Settings</button>
       <div id="comfyStatus"><span class="dot bad"></span>ComfyUI: unknown</div>
       <div id="workerStatus">Worker: unknown</div>
       <div id="queueCounts">pending=0 running=0</div>
@@ -80,6 +100,13 @@
         <div>
           <label>Workflow</label>
           <select id="workflowSelect"></select>
+        </div>
+
+        <div class="row-2">
+          <div>
+            <label>Job Name (optional)</label>
+            <input id="jobName" placeholder="e.g. hero-cam / lora-1.2" />
+          </div>
         </div>
 
         <div class="row-2">
@@ -113,7 +140,24 @@
             <input id="inputImage" placeholder="/home/cobra/ComfyUI/input/example.png" />
             <button id="inputImageBrowseBtn" type="button" class="btn browse-btn">Browse...</button>
           </div>
+          <div id="singleDropZone" class="drop-zone">Drop one image file here to fill the path</div>
           <div class="hint">Select exactly one image for single I2V job submission.</div>
+        </div>
+
+        <div class="row-2">
+          <div>
+            <label>Saved Prompts</label>
+            <select id="promptPresetSelect">
+              <option value="">(none)</option>
+            </select>
+          </div>
+          <div>
+            <label>Preset Name</label>
+            <div class="input-with-btn">
+              <input id="promptPresetName" placeholder="e.g. dragon_orbit_v1" />
+              <button id="savePromptPresetBtn" type="button" class="btn browse-btn">Save Prompt</button>
+            </div>
+          </div>
         </div>
 
         <div id="paramFields"></div>
@@ -130,7 +174,7 @@
       <table class="table" id="jobsTable">
         <thead>
           <tr>
-            <th>ID</th><th>Workflow</th><th>Input Dir</th><th>Status</th><th>Created</th><th>Elapsed</th><th>Actions</th>
+            <th>ID</th><th>Name</th><th>Workflow</th><th>Input Dir</th><th>Status</th><th>Created</th><th>Elapsed</th><th>Actions</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -144,6 +188,8 @@ let workflowMap = {};
 let loraChoices = [];
 let resolutionPresets = [];
 let recentInputDirs = [];
+let promptPresets = [];
+let settingsPresets = [];
 let lastJobsSig = '';
 let lastHealthSig = '';
 let refreshJobsBusy = false;
@@ -166,6 +212,7 @@ function defaultUiState() {
       flip_orientation: false,
       input_dir: '',
       single_image: '',
+      job_name: '',
       active_tab: 'batch'
     },
     workflow_params: {}
@@ -243,6 +290,7 @@ function loadUiState() {
         next.global.flip_orientation = !!parsed.global.flip_orientation;
         next.global.input_dir = typeof parsed.global.input_dir === 'string' ? parsed.global.input_dir : '';
         next.global.single_image = typeof parsed.global.single_image === 'string' ? parsed.global.single_image : '';
+        next.global.job_name = typeof parsed.global.job_name === 'string' ? parsed.global.job_name : '';
         next.global.active_tab = parsed.global.active_tab === 'single' ? 'single' : 'batch';
       }
       if (parsed.workflow_params && typeof parsed.workflow_params === 'object') {
@@ -281,6 +329,24 @@ function clearUiState() {
 
 function esc(v){ return String(v ?? ''); }
 
+function prettyJsonText(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    try {
+      return JSON.stringify(JSON.parse(trimmed), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 function elapsed(created, finished) {
   if (!created) return '-';
   const a = new Date(created).getTime();
@@ -288,6 +354,45 @@ function elapsed(created, finished) {
   const s = Math.max(0, Math.floor((b - a) / 1000));
   const m = Math.floor(s / 60);
   return `${m}m ${s % 60}s`;
+}
+
+function decodeFileUri(uri) {
+  const raw = String(uri || '').trim();
+  if (!raw) return '';
+  const lower = raw.toLowerCase();
+  if (!lower.startsWith('file://')) return raw;
+  let rest = raw.slice(7);
+  if (rest.startsWith('localhost/')) rest = rest.slice('localhost'.length);
+  try {
+    rest = decodeURIComponent(rest);
+  } catch {
+    // Keep raw path if decoding fails.
+  }
+  if (/^\/[A-Za-z]:\//.test(rest)) rest = rest.slice(1);
+  return rest;
+}
+
+function firstDroppedPath(dt) {
+  if (!dt) return '';
+
+  const uriList = String(dt.getData('text/uri-list') || '').trim();
+  if (uriList) {
+    const first = uriList
+      .split('\n')
+      .map(s => s.trim())
+      .find(s => s && !s.startsWith('#'));
+    if (first) return decodeFileUri(first);
+  }
+
+  const plain = String(dt.getData('text/plain') || '').trim();
+  if (plain) return decodeFileUri(plain);
+
+  const files = dt.files;
+  if (files && files.length > 0) {
+    const f = files[0];
+    if (f && typeof f.path === 'string' && f.path.trim()) return f.path.trim();
+  }
+  return '';
 }
 
 async function jfetch(url, opts={}) {
@@ -304,6 +409,33 @@ function workflowLabel(wf) {
   const display = wf.display_name || wf.name;
   const group = wf.group ? `[${wf.group}] ` : '';
   return `${group}${display} - ${wf.description || ''}`.trim();
+}
+
+function getParamElement(name) {
+  return document.querySelector(`#paramFields [data-param-name="${name}"]`);
+}
+
+function getPromptFieldValues() {
+  const pos = getParamElement('positive_prompt');
+  const neg = getParamElement('negative_prompt');
+  return {
+    positive_prompt: pos ? String(pos.value ?? '') : '',
+    negative_prompt: neg ? String(neg.value ?? '') : '',
+  };
+}
+
+function applyPromptFieldValues(values) {
+  const pos = getParamElement('positive_prompt');
+  const neg = getParamElement('negative_prompt');
+
+  if (pos) {
+    pos.value = String(values.positive_prompt ?? '');
+    pos.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  if (neg) {
+    neg.value = String(values.negative_prompt ?? '');
+    neg.dispatchEvent(new Event('input', { bubbles: true }));
+  }
 }
 
 function buildLoraSelect(defaultValue) {
@@ -366,6 +498,54 @@ function renderInputDirHistory() {
   }
 }
 
+function renderPromptPresets(selectedName='') {
+  const sel = document.getElementById('promptPresetSelect');
+  const wanted = String(selectedName || sel.value || '');
+  sel.innerHTML = '';
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = '(none)';
+  sel.appendChild(none);
+
+  for (const item of promptPresets) {
+    const opt = document.createElement('option');
+    opt.value = String(item.name || '');
+    opt.textContent = String(item.name || '');
+    sel.appendChild(opt);
+  }
+
+  if (wanted && [...sel.options].some(o => o.value === wanted)) {
+    sel.value = wanted;
+  } else {
+    sel.value = '';
+  }
+}
+
+function renderSettingsPresets(selectedName='') {
+  const sel = document.getElementById('settingsPresetSelect');
+  const wanted = String(selectedName || sel.value || '');
+  sel.innerHTML = '';
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = 'Settings Preset: (none)';
+  sel.appendChild(none);
+
+  for (const item of settingsPresets) {
+    const name = String(item.name || '');
+    if (!name) continue;
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  }
+
+  if (wanted && [...sel.options].some(o => o.value === wanted)) {
+    sel.value = wanted;
+  } else {
+    sel.value = '';
+  }
+}
+
 function setActiveTab(tabName, persist=true) {
   const next = tabName === 'single' ? 'single' : 'batch';
   activeTab = next;
@@ -409,12 +589,14 @@ function syncGlobalStateFromForm() {
   const flip = !!document.getElementById('flipOrientation').checked;
   const inputDir = document.getElementById('inputDir').value.trim();
   const inputImage = document.getElementById('inputImage').value.trim();
+  const jobName = document.getElementById('jobName').value.trim();
 
   uiState.global.workflow_name = workflow || '';
   uiState.global.resolution_preset = resolution || '';
   uiState.global.flip_orientation = flip;
   uiState.global.input_dir = inputDir;
   uiState.global.single_image = inputImage;
+  uiState.global.job_name = jobName;
   uiState.global.active_tab = activeTab;
   saveUiState();
 }
@@ -424,6 +606,7 @@ function applySavedGlobalState() {
   const flip = document.getElementById('flipOrientation');
   const input = document.getElementById('inputDir');
   const image = document.getElementById('inputImage');
+  const jobName = document.getElementById('jobName');
 
   const preset = String(uiState.global.resolution_preset || '');
   if (preset && [...resolution.options].some(opt => opt.value === preset)) {
@@ -433,6 +616,7 @@ function applySavedGlobalState() {
   if (uiState.global.input_dir) input.value = uiState.global.input_dir;
   else input.value = defaultBatchInputDir || '';
   if (uiState.global.single_image) image.value = uiState.global.single_image;
+  if (uiState.global.job_name) jobName.value = uiState.global.job_name;
   setActiveTab(uiState.global.active_tab === 'single' ? 'single' : 'batch', false);
 }
 
@@ -444,12 +628,14 @@ function resetSavedOptions() {
   const input = document.getElementById('inputDir');
   const image = document.getElementById('inputImage');
   const flip = document.getElementById('flipOrientation');
+  const jobName = document.getElementById('jobName');
 
   if (workflowSelect.options.length > 0) workflowSelect.selectedIndex = 0;
   if (resolution.options.length > 0) resolution.selectedIndex = 0;
   input.value = defaultBatchInputDir || '';
   image.value = '';
   flip.checked = false;
+  jobName.value = '';
   setActiveTab('batch', false);
   currentWorkflowName = workflowSelect.value || '';
   renderParamFields();
@@ -468,7 +654,7 @@ function renderParamFields() {
     ? uiState.workflow_params[wf.name]
     : {};
 
-  for (const [name, p] of Object.entries(wf.parameters || {})) {
+  function makeParamWrap(name, p) {
     const wrap = document.createElement('div');
     const label = document.createElement('label');
     label.textContent = p.label || name;
@@ -515,7 +701,56 @@ function renderParamFields() {
     const persistParam = () => saveCurrentWorkflowParams();
     el.addEventListener('change', persistParam);
     el.addEventListener('input', persistParam);
+    return wrap;
+  }
+
+  function extraGroupIndex(name) {
+    if (name.startsWith('extra_lora3_')) return 3;
+    if (name.startsWith('extra_lora2_')) return 2;
+    if (name.startsWith('extra_lora_')) return 1;
+    return 0;
+  }
+
+  function appendExtraHint(container, idx) {
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = idx === 1
+      ? '0 disables this extra LoRA. Base 4-step lightx2v LoRAs remain enabled.'
+      : '0 disables this extra LoRA slot.';
+    container.appendChild(hint);
+  }
+
+  const extraContainers = {};
+  for (const idx of [1, 2, 3]) {
+    const details = document.createElement('details');
+    details.open = false;
+    const summary = document.createElement('summary');
+    summary.textContent = `Extra LoRA ${idx}`;
+    details.appendChild(summary);
+    const body = document.createElement('div');
+    body.className = 'row';
+    details.appendChild(body);
+    extraContainers[idx] = { details, body, used: false };
+  }
+
+  for (const [name, p] of Object.entries(wf.parameters || {})) {
+    const wrap = makeParamWrap(name, p);
+    const idx = extraGroupIndex(name);
+    if (idx > 0) {
+      extraContainers[idx].used = true;
+      extraContainers[idx].body.appendChild(wrap);
+      if (name === `extra_lora${idx === 1 ? '' : idx}_strength`) {
+        appendExtraHint(extraContainers[idx].body, idx);
+      }
+      continue;
+    }
     box.appendChild(wrap);
+  }
+
+  for (const idx of [1, 2, 3]) {
+    if (extraContainers[idx].used) {
+      box.appendChild(extraContainers[idx].details);
+    }
   }
 
   saveCurrentWorkflowParams();
@@ -593,6 +828,184 @@ async function loadRecentInputDirs() {
     recentInputDirs = [];
   }
   renderInputDirHistory();
+}
+
+async function loadPromptPresets(selectedName='') {
+  try {
+    const data = await jfetch('/api/prompt-presets?limit=500');
+    promptPresets = Array.isArray(data.items) ? data.items : [];
+  } catch {
+    promptPresets = [];
+  }
+  renderPromptPresets(selectedName);
+}
+
+async function loadSettingsPresets(selectedName='') {
+  try {
+    const data = await jfetch('/api/settings-presets?limit=500');
+    settingsPresets = Array.isArray(data.items) ? data.items : [];
+  } catch {
+    settingsPresets = [];
+  }
+  renderSettingsPresets(selectedName);
+}
+
+function buildSettingsPayloadFromForm() {
+  saveCurrentWorkflowParams();
+  syncGlobalStateFromForm();
+  return {
+    workflow_name: document.getElementById('workflowSelect').value || '',
+    resolution_preset: document.getElementById('resolutionPreset').value || '',
+    flip_orientation: !!document.getElementById('flipOrientation').checked,
+    input_dir: document.getElementById('inputDir').value || '',
+    single_image: document.getElementById('inputImage').value || '',
+    job_name: document.getElementById('jobName').value || '',
+    active_tab: activeTab === 'single' ? 'single' : 'batch',
+    prompt_preset_name: document.getElementById('promptPresetSelect').value || '',
+    workflow_params: uiState.workflow_params || {},
+  };
+}
+
+function applySettingsPayload(payload) {
+  if (!payload || typeof payload !== 'object') return;
+
+  const wfSel = document.getElementById('workflowSelect');
+  const resSel = document.getElementById('resolutionPreset');
+  const flip = document.getElementById('flipOrientation');
+  const inputDir = document.getElementById('inputDir');
+  const inputImage = document.getElementById('inputImage');
+  const jobName = document.getElementById('jobName');
+  const promptPresetSel = document.getElementById('promptPresetSelect');
+
+  if (payload.workflow_params && typeof payload.workflow_params === 'object') {
+    uiState.workflow_params = payload.workflow_params;
+  }
+
+  const wfName = String(payload.workflow_name || '');
+  if (wfName && workflowMap[wfName]) {
+    wfSel.value = wfName;
+  }
+
+  currentWorkflowName = wfSel.value || '';
+  renderParamFields();
+
+  const tab = payload.active_tab === 'single' ? 'single' : 'batch';
+  setActiveTab(tab, false);
+
+  const preset = String(payload.resolution_preset || '');
+  if (preset && [...resSel.options].some(o => o.value === preset)) {
+    resSel.value = preset;
+  }
+  flip.checked = !!payload.flip_orientation;
+  inputDir.value = String(payload.input_dir || '');
+  inputImage.value = String(payload.single_image || '');
+  jobName.value = String(payload.job_name || '');
+
+  const promptPresetName = String(payload.prompt_preset_name || '');
+  if (promptPresetName && [...promptPresetSel.options].some(o => o.value === promptPresetName)) {
+    promptPresetSel.value = promptPresetName;
+    applySelectedPromptPreset();
+  } else if (!promptPresetName) {
+    promptPresetSel.value = '';
+  }
+
+  syncGlobalStateFromForm();
+}
+
+function applySelectedSettingsPreset() {
+  const sel = document.getElementById('settingsPresetSelect');
+  const name = String(sel.value || '').trim();
+  if (!name) return;
+  const preset = settingsPresets.find(x => String(x.name || '') === name);
+  if (!preset || typeof preset.payload !== 'object') return;
+  applySettingsPayload(preset.payload);
+  document.getElementById('settingsPresetName').value = name;
+  document.getElementById('submitMsg').textContent = `Applied settings preset '${name}'.`;
+}
+
+async function saveSettingsPresetFromUI() {
+  const msg = document.getElementById('submitMsg');
+  const btn = document.getElementById('saveSettingsPresetBtn');
+  const nameInput = document.getElementById('settingsPresetName');
+  const name = String(nameInput.value || '').trim();
+  if (!name) {
+    msg.textContent = 'Settings preset name is required.';
+    return;
+  }
+
+  const payload = buildSettingsPayloadFromForm();
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    await jfetch('/api/settings-presets', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name, payload })
+    });
+    await loadSettingsPresets(name);
+    msg.textContent = `Saved settings preset '${name}'.`;
+  } catch (e) {
+    msg.textContent = `Save settings error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+function applySelectedPromptPreset() {
+  const sel = document.getElementById('promptPresetSelect');
+  const name = String(sel.value || '').trim();
+  if (!name) return;
+  const preset = promptPresets.find(x => String(x.name || '') === name);
+  if (!preset) return;
+  applyPromptFieldValues({
+    positive_prompt: String(preset.positive_prompt || ''),
+    negative_prompt: String(preset.negative_prompt || ''),
+  });
+  saveCurrentWorkflowParams();
+  document.getElementById('promptPresetName').value = name;
+}
+
+async function savePromptPresetFromUI() {
+  const msg = document.getElementById('submitMsg');
+  const btn = document.getElementById('savePromptPresetBtn');
+  const nameInput = document.getElementById('promptPresetName');
+  const name = String(nameInput.value || '').trim();
+  if (!name) {
+    msg.textContent = 'Preset name is required.';
+    return;
+  }
+
+  const values = getPromptFieldValues();
+  const posField = getParamElement('positive_prompt');
+  const negField = getParamElement('negative_prompt');
+  if (!posField && !negField) {
+    msg.textContent = 'Current workflow has no prompt fields to save.';
+    return;
+  }
+
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    await jfetch('/api/prompt-presets', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name,
+        positive_prompt: values.positive_prompt,
+        negative_prompt: values.negative_prompt,
+      })
+    });
+    await loadPromptPresets(name);
+    msg.textContent = `Saved prompt preset '${name}'.`;
+  } catch (e) {
+    msg.textContent = `Save preset error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
 }
 
 async function loadDefaultInputDir() {
@@ -686,6 +1099,7 @@ async function submitJob() {
   const flipOrientation = !!document.getElementById('flipOrientation').checked;
 
   const params = readParamsFromForm();
+  const jobName = document.getElementById('jobName').value.trim();
   uiState.workflow_params[workflow_name] = params;
   syncGlobalStateFromForm();
 
@@ -720,13 +1134,22 @@ async function submitJob() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         workflow_name,
+        job_name: jobName || null,
         ...pathPayload,
         params,
         resolution_preset: supportsResolution ? resolutionPreset : null,
-        flip_orientation: supportsResolution ? flipOrientation : false
+        flip_orientation: supportsResolution ? flipOrientation : false,
+        split_by_input: activeTab === 'batch'
       })
     });
-    msg.textContent = `Submitted job ${data.job_id}`;
+    const ids = Array.isArray(data.job_ids) ? data.job_ids : [];
+    if (ids.length > 1) {
+      msg.textContent = `Queued ${ids.length} jobs (${ids[0]}...${ids[ids.length - 1]})`;
+    } else if (ids.length === 1) {
+      msg.textContent = `Submitted job ${ids[0]}`;
+    } else {
+      msg.textContent = `Submitted job ${data.job_id}`;
+    }
     lastJobsSig = '';
     await loadRecentInputDirs();
     await refreshJobs();
@@ -791,28 +1214,112 @@ async function browseInputImage() {
   }
 }
 
+async function uploadDroppedImage(fileObj) {
+  const filename = (fileObj && fileObj.name) ? String(fileObj.name) : 'upload.png';
+  return jfetch('/api/upload/input-image', {
+    method: 'POST',
+    headers: {
+      'Content-Type': (fileObj && fileObj.type) ? fileObj.type : 'application/octet-stream',
+      'X-Filename': filename
+    },
+    body: fileObj
+  });
+}
+
+function setupSingleDropZone() {
+  const zone = document.getElementById('singleDropZone');
+  const input = document.getElementById('inputImage');
+  const msg = document.getElementById('submitMsg');
+  if (!zone || !input) return;
+
+  const activate = () => zone.classList.add('active');
+  const deactivate = () => zone.classList.remove('active');
+
+  zone.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    activate();
+  });
+  zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    activate();
+  });
+  zone.addEventListener('dragleave', () => {
+    deactivate();
+  });
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    deactivate();
+    const path = firstDroppedPath(e.dataTransfer);
+    const files = e.dataTransfer && e.dataTransfer.files ? e.dataTransfer.files : null;
+
+    if (path) {
+      input.value = path;
+      syncGlobalStateFromForm();
+      normalizeInputImageField()
+        .then(() => {
+          msg.textContent = `Selected image: ${input.value}`;
+        })
+        .catch(() => {});
+      return;
+    }
+
+    if (!files || files.length === 0) {
+      msg.textContent = 'Could not read dropped file. Use Browse or paste full path.';
+      return;
+    }
+
+    uploadDroppedImage(files[0])
+      .then((data) => {
+        input.value = String((data && data.path) || '');
+        syncGlobalStateFromForm();
+        msg.textContent = `Uploaded + selected image: ${input.value}`;
+      })
+      .catch((err) => {
+        msg.textContent = `Drop upload error: ${err.message}`;
+      });
+  });
+}
+
 function statusBadge(status) {
   return `<span class="badge s-${status}">${status}</span>`;
 }
 
-async function jobAction(jobId, action) {
-  const data = await jfetch(`/api/jobs/${jobId}/${action}`, { method: 'POST' });
+async function jobAction(jobId, action, triggerBtn) {
   const msg = document.getElementById('submitMsg');
-  if (action === 'cancel') {
-    const c = data.cancel_summary || {};
-    const running = Number(c.running_prompts || 0);
-    const canceledPending = Number(c.canceled_pending || 0);
-    if (running > 0) {
-      msg.textContent = `Cancel requested for job ${jobId}: canceled ${canceledPending} pending prompt(s), waiting for ${running} running prompt(s).`;
-    } else {
-      msg.textContent = `Canceled job ${jobId}: canceled ${canceledPending} pending prompt(s).`;
+  const btn = triggerBtn || null;
+  const original = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = action === 'cancel' ? 'Canceling...' : 'Retrying...';
+  }
+
+  try {
+    const data = await jfetch(`/api/jobs/${jobId}/${action}`, { method: 'POST' });
+    if (action === 'cancel') {
+      const c = data.cancel_summary || {};
+      const running = Number(c.running_prompts || 0);
+      const canceledPending = Number(c.canceled_pending || 0);
+      if (running > 0) {
+        msg.textContent = `Cancel requested for job ${jobId}: canceled ${canceledPending} pending prompt(s), waiting for ${running} running prompt(s).`;
+      } else {
+        msg.textContent = `Canceled job ${jobId}: canceled ${canceledPending} pending prompt(s).`;
+      }
+    }
+    if (action === 'retry') {
+      msg.textContent = `Retried job ${jobId}.`;
+    }
+    lastJobsSig = '';
+    lastHealthSig = '';
+    await refreshJobs();
+    await refreshHealth();
+  } catch (e) {
+    msg.textContent = `${action} failed for job ${jobId}: ${e.message}`;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = original;
     }
   }
-  if (action === 'retry') {
-    msg.textContent = `Retried job ${jobId}.`;
-  }
-  lastJobsSig = '';
-  await refreshJobs();
 }
 
 async function loadJobDetail(jobId, detailsEl) {
@@ -822,6 +1329,7 @@ async function loadJobDetail(jobId, detailsEl) {
   body.innerHTML = 'Loading...';
   try {
     const detail = await jfetch(`/api/jobs/${jobId}`);
+    const jobInfo = detail && typeof detail.job === 'object' ? detail.job : {};
     const prompts = Array.isArray(detail.prompts) ? detail.prompts : [];
     body.innerHTML = '';
 
@@ -865,13 +1373,7 @@ async function loadJobDetail(jobId, detailsEl) {
       payloadSummary.textContent = 'Prompt JSON';
       payloadDetails.appendChild(payloadSummary);
       const payloadPre = document.createElement('pre');
-      let rendered = String(p.prompt_json || '');
-      try {
-        rendered = JSON.stringify(JSON.parse(rendered), null, 2);
-      } catch {
-        // Keep raw payload when not valid JSON.
-      }
-      payloadPre.textContent = rendered;
+      payloadPre.textContent = prettyJsonText(p.prompt_json);
       payloadDetails.appendChild(payloadPre);
       card.appendChild(payloadDetails);
 
@@ -880,16 +1382,26 @@ async function loadJobDetail(jobId, detailsEl) {
 
     const summary = document.createElement('div');
     summary.className = 'prompt-meta';
-    summary.textContent = `Job ID: ${jobId} | Prompt rows: ${prompts.length}`;
+    const jobName = String(jobInfo.job_name || '').trim();
+    summary.textContent = `Job ID: ${jobId}${jobName ? ` | Name: ${jobName}` : ''} | Prompt rows: ${prompts.length}`;
     body.appendChild(summary);
     body.appendChild(list);
+
+    const settingsDetails = document.createElement('details');
+    const settingsSummary = document.createElement('summary');
+    settingsSummary.textContent = 'Run Settings';
+    settingsDetails.appendChild(settingsSummary);
+    const settingsPre = document.createElement('pre');
+    settingsPre.textContent = prettyJsonText(jobInfo.params_json) || '{}';
+    settingsDetails.appendChild(settingsPre);
+    body.appendChild(settingsDetails);
   } catch (e) {
     body.textContent = `Error loading detail: ${e.message}`;
   }
 }
 
 function computeJobsSig(jobs) {
-  const compact = jobs.map(j => [j.id, j.status, j.prompt_count, j.created_at, j.finished_at]);
+  const compact = jobs.map(j => [j.id, j.job_name, j.status, j.prompt_count, j.created_at, j.finished_at]);
   return JSON.stringify(compact);
 }
 
@@ -908,9 +1420,11 @@ async function refreshJobs() {
     for (const job of jobs) {
       const wf = workflowMap[job.workflow_name];
       const wfLabel = wf ? (wf.display_name || job.workflow_name) : job.workflow_name;
+      const jobName = String(job.job_name || '').trim() || '-';
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${job.id}</td>
+        <td>${esc(jobName)}</td>
         <td>${esc(wfLabel)}</td>
         <td>${esc(job.input_dir)}</td>
         <td>${statusBadge(job.status)}</td>
@@ -925,7 +1439,7 @@ async function refreshJobs() {
 
       const dtr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 7;
+      td.colSpan = 8;
 
       const details = document.createElement('details');
       const sum = document.createElement('summary');
@@ -950,8 +1464,8 @@ async function refreshJobs() {
       tbody.appendChild(dtr);
     }
 
-    document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => jobAction(b.dataset.cancel, 'cancel'));
-    document.querySelectorAll('[data-retry]').forEach(b => b.onclick = () => jobAction(b.dataset.retry, 'retry'));
+    document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => jobAction(b.dataset.cancel, 'cancel', b));
+    document.querySelectorAll('[data-retry]').forEach(b => b.onclick = () => jobAction(b.dataset.retry, 'retry', b));
   } finally {
     refreshJobsBusy = false;
   }
@@ -1000,6 +1514,11 @@ document.getElementById('inputDir').addEventListener('input', syncGlobalStateFro
 document.getElementById('inputDir').addEventListener('blur', () => { normalizeInputDirField().catch(() => {}); });
 document.getElementById('inputImage').addEventListener('input', syncGlobalStateFromForm);
 document.getElementById('inputImage').addEventListener('blur', () => { normalizeInputImageField().catch(() => {}); });
+document.getElementById('jobName').addEventListener('input', syncGlobalStateFromForm);
+document.getElementById('promptPresetSelect').addEventListener('change', applySelectedPromptPreset);
+document.getElementById('savePromptPresetBtn').addEventListener('click', savePromptPresetFromUI);
+document.getElementById('settingsPresetSelect').addEventListener('change', applySelectedSettingsPreset);
+document.getElementById('saveSettingsPresetBtn').addEventListener('click', saveSettingsPresetFromUI);
 document.getElementById('resolutionPreset').addEventListener('change', syncGlobalStateFromForm);
 document.getElementById('flipOrientation').addEventListener('change', syncGlobalStateFromForm);
 document.getElementById('pauseBtn').addEventListener('click', () => jfetch('/api/queue/pause', {method:'POST'}).then(() => { lastHealthSig = ''; return refreshHealth(); }));
@@ -1012,8 +1531,11 @@ document.getElementById('reloadLorasBtn').addEventListener('click', reloadLorasF
   await loadLoras();
   await loadResolutionPresets();
   await loadRecentInputDirs();
+  await loadPromptPresets();
+  await loadSettingsPresets();
   await loadDefaultInputDir();
   await loadWorkflows();
+  setupSingleDropZone();
   await refreshHealth();
   await refreshJobs();
   setInterval(refreshHealth, 5000);

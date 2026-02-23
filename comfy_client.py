@@ -106,6 +106,34 @@ def queue_prompt(base_url: str, prompt_json: dict[str, Any]) -> str:
     return str(prompt_id)
 
 
+def get_history_entry(base_url: str, prompt_id: str) -> dict[str, Any] | None:
+    history = _request_json("GET", base_url, f"/history/{urllib.parse.quote(prompt_id)}")
+    if not isinstance(history, dict):
+        return None
+    entry = history.get(prompt_id)
+    return entry if isinstance(entry, dict) else None
+
+
+def get_queue_prompt_ids(base_url: str) -> set[str]:
+    data = _request_json("GET", base_url, "/queue")
+    if not isinstance(data, dict):
+        return set()
+
+    out: set[str] = set()
+    for key in ("queue_running", "queue_pending"):
+        rows = data.get(key)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, list) or len(row) < 2:
+                continue
+            pid = row[1]
+            if pid is None:
+                continue
+            out.add(str(pid))
+    return out
+
+
 
 def poll_until_done(
     base_url: str,

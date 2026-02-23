@@ -73,6 +73,7 @@ def local_submit(workflow_name: str, input_dir: str, params: dict[str, Any], dry
     db = QueueDB(ROOT / "data" / "queue.db")
     job_id = db.create_job(
         workflow_name=wf.name,
+        job_name=None,
         input_dir=str(src),
         params_json=resolved,
         prompt_specs=specs,

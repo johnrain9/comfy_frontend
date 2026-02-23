@@ -4,10 +4,11 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -19,6 +20,7 @@ from prompt_builder import build_prompts, resolve_params
 from worker import Worker
 
 LORA_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 WAN_POSITIVE_TEMPLATE = "(at 0 second: )(at 3 second: )(at 7 second: )"
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 RESOLUTION_PRESETS: list[dict[str, Any]] = [
@@ -35,15 +37,18 @@ RESOLUTION_PRESET_MAP: dict[str, tuple[int, int]] = {
 
 class JobCreateRequest(BaseModel):
     workflow_name: str
+    job_name: str | None = None
     input_dir: str
     params: dict[str, Any] = Field(default_factory=dict)
     resolution_preset: str | None = None
     flip_orientation: bool = False
+    split_by_input: bool = False
     priority: int = 0
 
 
 class SingleJobCreateRequest(BaseModel):
     workflow_name: str
+    job_name: str | None = None
     input_image: str
     params: dict[str, Any] = Field(default_factory=dict)
     resolution_preset: str | None = None
@@ -61,6 +66,17 @@ class PickImageRequest(BaseModel):
 
 class InputPathRequest(BaseModel):
     path: str
+
+
+class PromptPresetSaveRequest(BaseModel):
+    name: str
+    positive_prompt: str = ""
+    negative_prompt: str = ""
+
+
+class SettingsPresetSaveRequest(BaseModel):
+    name: str
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class AppState:
@@ -445,6 +461,34 @@ def api_loras() -> list[str]:
     return _discover_loras()
 
 
+@app.get("/api/prompt-presets")
+def api_prompt_presets(limit: int = Query(default=200, ge=1, le=1000)) -> dict[str, Any]:
+    return {"items": state.db.list_prompt_presets(limit=limit)}
+
+
+@app.post("/api/prompt-presets", status_code=201)
+def api_save_prompt_preset(req: PromptPresetSaveRequest) -> dict[str, Any]:
+    try:
+        item = state.db.save_prompt_preset(req.name, req.positive_prompt, req.negative_prompt)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return item
+
+
+@app.get("/api/settings-presets")
+def api_settings_presets(limit: int = Query(default=200, ge=1, le=1000)) -> dict[str, Any]:
+    return {"items": state.db.list_settings_presets(limit=limit)}
+
+
+@app.post("/api/settings-presets", status_code=201)
+def api_save_settings_preset(req: SettingsPresetSaveRequest) -> dict[str, Any]:
+    try:
+        item = state.db.save_settings_preset(req.name, req.payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return item
+
+
 @app.post("/api/reload/workflows")
 def api_reload_workflows() -> dict[str, Any]:
     try:
@@ -512,9 +556,43 @@ def api_pick_image(req: PickImageRequest | None = None) -> dict[str, str]:
     return {"path": picked}
 
 
+@app.post("/api/upload/input-image")
+async def api_upload_input_image(
+    request: Request,
+    x_filename: str | None = Header(default=None),
+) -> dict[str, str]:
+    raw_name = Path(x_filename or "upload.png").name
+    suffix = Path(raw_name).suffix.lower()
+    if suffix not in IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported image extension: {suffix or '(none)'} (allowed: {', '.join(sorted(IMAGE_EXTENSIONS))})",
+        )
+
+    safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(raw_name).stem).strip("._") or "upload"
+    unique = f"{int(time.time() * 1000)}_{safe_stem}{suffix}"
+    state.comfy_input_dir.mkdir(parents=True, exist_ok=True)
+    dest = (state.comfy_input_dir / unique).resolve()
+
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="uploaded file is empty")
+    dest.write_bytes(data)
+
+    return {"path": str(dest)}
+
+
 def _list_inputs(input_dir: Path, exts: list[str]) -> list[Path]:
     allowed = {e.lower() for e in exts}
     return sorted([p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() in allowed])
+
+
+def _derive_split_job_name(base_name: str | None, input_file: Path) -> str:
+    base = str(base_name or "").strip()
+    stem = input_file.stem
+    if base:
+        return f"{base} | {stem}"
+    return stem
 
 
 def _enqueue_job_from_files(
@@ -525,6 +603,7 @@ def _enqueue_job_from_files(
     flip_orientation: bool,
     priority: int,
     input_dir: str,
+    job_name: str | None = None,
 ) -> dict[str, Any]:
     try:
         resolved = resolve_params(wf, params)
@@ -542,6 +621,7 @@ def _enqueue_job_from_files(
 
     job_id = state.db.create_job(
         workflow_name=wf.name,
+        job_name=(str(job_name).strip() if job_name is not None else None),
         input_dir=input_dir,
         params_json=resolved,
         prompt_specs=specs,
@@ -549,7 +629,7 @@ def _enqueue_job_from_files(
         move_processed=wf.move_processed,
     )
     state.db.touch_input_dir_history(input_dir)
-    return {"job_id": job_id, "prompt_count": len(specs), "input_dir": input_dir}
+    return {"job_id": job_id, "job_name": (str(job_name).strip() if job_name else None), "prompt_count": len(specs), "input_dir": input_dir}
 
 
 @app.post("/api/jobs", status_code=201)
@@ -571,6 +651,28 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
     if not files:
         raise HTTPException(status_code=400, detail=f"no matching input files in {input_dir}")
 
+    if bool(req.split_by_input):
+        created: list[dict[str, Any]] = []
+        for src in files:
+            created.append(
+                _enqueue_job_from_files(
+                    wf=wf,
+                    files=[src],
+                    params=req.params,
+                    resolution_preset=req.resolution_preset,
+                    flip_orientation=bool(req.flip_orientation),
+                    priority=req.priority,
+                    input_dir=normalized_input_dir,
+                    job_name=_derive_split_job_name(req.job_name, src),
+                )
+            )
+        return {
+            "job_ids": [int(item["job_id"]) for item in created],
+            "job_count": len(created),
+            "prompt_count": int(sum(int(item["prompt_count"]) for item in created)),
+            "input_dir": normalized_input_dir,
+        }
+
     return _enqueue_job_from_files(
         wf=wf,
         files=files,
@@ -579,6 +681,7 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
         flip_orientation=bool(req.flip_orientation),
         priority=req.priority,
         input_dir=normalized_input_dir,
+        job_name=req.job_name,
     )
 
 
@@ -610,6 +713,7 @@ def create_single_job(req: SingleJobCreateRequest) -> dict[str, Any]:
         flip_orientation=bool(req.flip_orientation),
         priority=req.priority,
         input_dir=str(image_path.parent),
+        job_name=req.job_name,
     )
 
 

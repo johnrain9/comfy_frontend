@@ -11,7 +11,9 @@ from comfy_client import (
     ComfyError,
     ComfyUnreachableError,
     ComfyValidationError,
+    get_history_entry,
     get_outputs,
+    get_queue_prompt_ids,
     health_check,
     poll_until_done,
     queue_prompt,
@@ -101,7 +103,7 @@ class Worker:
         with self._state_lock:
             self._running = True
 
-        self.db.recover_interrupted()
+        self._recover_inflight_prompts_on_startup()
         try:
             while not self._stop_event.is_set():
                 if self.db.is_paused():
@@ -114,6 +116,7 @@ class Worker:
                     time.sleep(wait_s)
                     continue
 
+                self._reconcile_running_prompts_once()
                 self._backoff_idx = 0
                 row = self.db.next_pending_prompt()
                 if not row:
@@ -222,6 +225,153 @@ class Worker:
         finally:
             with self._state_lock:
                 self._running = False
+
+    def _reconcile_running_prompts_once(self) -> None:
+        running_rows = self.db.list_running_prompts()
+        if not running_rows:
+            return
+
+        for row in running_rows:
+            prompt_row_id = int(row["id"])
+            job_id = int(row["job_id"])
+            comfy_prompt_id = str(row.get("prompt_id") or "").strip()
+            if not comfy_prompt_id:
+                self.db.update_prompt_status(
+                    prompt_row_id,
+                    "failed",
+                    finished_at=utc_now(),
+                    exit_status="interrupted",
+                    error_detail="running row had no prompt_id after restart",
+                )
+                self.db.update_job_status(job_id)
+                continue
+
+            try:
+                entry = get_history_entry(self.base_url, comfy_prompt_id)
+            except ComfyError:
+                continue
+
+            if not entry:
+                continue
+
+            status = entry.get("status") if isinstance(entry, dict) else {}
+            status = status if isinstance(status, dict) else {}
+            completed = bool(status.get("completed", False))
+            status_str = str(status.get("status_str", "unknown"))
+
+            if completed:
+                output_paths = get_outputs(self.base_url, comfy_prompt_id)
+                self.db.update_prompt_status(
+                    prompt_row_id,
+                    "succeeded",
+                    finished_at=utc_now(),
+                    exit_status=status_str,
+                    output_paths=json.dumps(output_paths),
+                )
+                self.db.update_job_status(job_id)
+                continue
+
+            if status_str in {"error", "failed"}:
+                self.db.update_prompt_status(
+                    prompt_row_id,
+                    "failed",
+                    finished_at=utc_now(),
+                    exit_status=status_str,
+                    error_detail=f"Comfy returned status={status_str}",
+                )
+                self.db.update_job_status(job_id)
+                continue
+
+            if status_str == "canceled":
+                self.db.update_prompt_status(
+                    prompt_row_id,
+                    "canceled",
+                    finished_at=utc_now(),
+                    exit_status=status_str,
+                    error_detail="Comfy canceled prompt",
+                )
+                self.db.update_job_status(job_id)
+
+    def _recover_inflight_prompts_on_startup(self) -> None:
+        running_rows = self.db.list_running_prompts()
+        if not running_rows:
+            return
+
+        queue_ids: set[str] | None = None
+        try:
+            queue_ids = get_queue_prompt_ids(self.base_url)
+        except ComfyError:
+            queue_ids = None
+
+        for row in running_rows:
+            prompt_row_id = int(row["id"])
+            job_id = int(row["job_id"])
+            comfy_prompt_id = str(row.get("prompt_id") or "").strip()
+            if not comfy_prompt_id:
+                self.db.update_prompt_status(
+                    prompt_row_id,
+                    "failed",
+                    finished_at=utc_now(),
+                    exit_status="interrupted",
+                    error_detail="interrupted (missing prompt_id)",
+                )
+                self.db.update_job_status(job_id)
+                continue
+
+            try:
+                entry = get_history_entry(self.base_url, comfy_prompt_id)
+            except ComfyError:
+                # Keep as running when Comfy is unavailable at startup.
+                continue
+
+            if entry:
+                status = entry.get("status") if isinstance(entry, dict) else {}
+                status = status if isinstance(status, dict) else {}
+                completed = bool(status.get("completed", False))
+                status_str = str(status.get("status_str", "unknown"))
+                if completed:
+                    output_paths = get_outputs(self.base_url, comfy_prompt_id)
+                    self.db.update_prompt_status(
+                        prompt_row_id,
+                        "succeeded",
+                        finished_at=utc_now(),
+                        exit_status=status_str,
+                        output_paths=json.dumps(output_paths),
+                    )
+                    self.db.update_job_status(job_id)
+                    continue
+                if status_str in {"error", "failed"}:
+                    self.db.update_prompt_status(
+                        prompt_row_id,
+                        "failed",
+                        finished_at=utc_now(),
+                        exit_status=status_str,
+                        error_detail=f"Comfy returned status={status_str}",
+                    )
+                    self.db.update_job_status(job_id)
+                    continue
+                if status_str == "canceled":
+                    self.db.update_prompt_status(
+                        prompt_row_id,
+                        "canceled",
+                        finished_at=utc_now(),
+                        exit_status=status_str,
+                        error_detail="Comfy canceled prompt",
+                    )
+                    self.db.update_job_status(job_id)
+                    continue
+
+            # If Comfy queue endpoint is available and prompt is not active and no history entry,
+            # treat it as interrupted. Otherwise keep running and let periodic reconciliation resolve it.
+            if queue_ids is not None and comfy_prompt_id not in queue_ids:
+                self.db.update_prompt_status(
+                    prompt_row_id,
+                    "failed",
+                    finished_at=utc_now(),
+                    exit_status="interrupted",
+                    error_detail="interrupted (not found in Comfy queue/history after restart)",
+                )
+                self.db.update_job_status(job_id)
 
 
 __all__ = ["Worker"]
