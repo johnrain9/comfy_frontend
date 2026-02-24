@@ -228,6 +228,15 @@ def _apply_param_overrides(prompt: dict[str, Any], workflow_def: WorkflowDef, re
         if not pdef.nodes:
             continue
         value = resolved_params[pname]
+        # Some LoRA loader nodes validate lora_name against a non-empty list even when
+        # strength is 0. Keep template defaults when extra lora name is left blank.
+        if (
+            isinstance(value, str)
+            and value.strip() == ""
+            and pname.startswith("extra_lora")
+            and pname.endswith("_name")
+        ):
+            continue
         for nid in pdef.nodes:
             node = prompt.get(nid)
             if not isinstance(node, dict):

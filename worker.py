@@ -88,6 +88,9 @@ class Worker:
             if src in seen:
                 continue
             seen.add(src)
+            # Do not move files still referenced by queued/running prompts in other jobs.
+            if self.db.has_active_prompts_for_input(src, exclude_job_id=job_id):
+                continue
             src_path = Path(src)
             if not src_path.exists():
                 continue

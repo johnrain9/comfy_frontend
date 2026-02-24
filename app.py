@@ -42,6 +42,7 @@ class JobCreateRequest(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     resolution_preset: str | None = None
     flip_orientation: bool = False
+    move_processed: bool = False
     split_by_input: bool = False
     priority: int = 0
 
@@ -53,6 +54,7 @@ class SingleJobCreateRequest(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     resolution_preset: str | None = None
     flip_orientation: bool = False
+    move_processed: bool = False
     priority: int = 0
 
 
@@ -604,6 +606,7 @@ def _enqueue_job_from_files(
     priority: int,
     input_dir: str,
     job_name: str | None = None,
+    move_processed: bool = False,
 ) -> dict[str, Any]:
     try:
         resolved = resolve_params(wf, params)
@@ -626,7 +629,7 @@ def _enqueue_job_from_files(
         params_json=resolved,
         prompt_specs=specs,
         priority=priority,
-        move_processed=wf.move_processed,
+        move_processed=bool(move_processed),
     )
     state.db.touch_input_dir_history(input_dir)
     return {"job_id": job_id, "job_name": (str(job_name).strip() if job_name else None), "prompt_count": len(specs), "input_dir": input_dir}
@@ -664,6 +667,7 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
                     priority=req.priority,
                     input_dir=normalized_input_dir,
                     job_name=_derive_split_job_name(req.job_name, src),
+                    move_processed=bool(req.move_processed),
                 )
             )
         return {
@@ -682,6 +686,7 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
         priority=req.priority,
         input_dir=normalized_input_dir,
         job_name=req.job_name,
+        move_processed=bool(req.move_processed),
     )
 
 
@@ -714,6 +719,7 @@ def create_single_job(req: SingleJobCreateRequest) -> dict[str, Any]:
         priority=req.priority,
         input_dir=str(image_path.parent),
         job_name=req.job_name,
+        move_processed=bool(req.move_processed),
     )
 
 

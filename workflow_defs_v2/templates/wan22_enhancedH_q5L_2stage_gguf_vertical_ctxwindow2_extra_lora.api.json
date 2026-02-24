@@ -434,7 +434,7 @@
   },
   "211": {
     "inputs": {
-      "lora_name": "",
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
       "strength_model": 0,
       "model": [
         "201",
@@ -448,7 +448,7 @@
   },
   "212": {
     "inputs": {
-      "lora_name": "",
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
       "strength_model": 0,
       "model": [
         "202",
@@ -462,7 +462,7 @@
   },
   "221": {
     "inputs": {
-      "lora_name": "",
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
       "strength_model": 0,
       "model": [
         "211",
@@ -476,7 +476,7 @@
   },
   "222": {
     "inputs": {
-      "lora_name": "",
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
       "strength_model": 0,
       "model": [
         "212",

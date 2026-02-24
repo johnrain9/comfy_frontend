@@ -122,6 +122,12 @@
             </div>
           </div>
         </div>
+        <div>
+          <div class="inline" style="padding-top:2px;">
+            <input id="moveProcessed" type="checkbox" style="width:auto;" />
+            <span>Move processed source files to <code>_processed</code> after successful job</span>
+          </div>
+        </div>
 
         <div id="batchInputSection">
           <label>Input Directory</label>
@@ -210,6 +216,7 @@ function defaultUiState() {
       workflow_name: '',
       resolution_preset: '',
       flip_orientation: false,
+      move_processed: false,
       input_dir: '',
       single_image: '',
       job_name: '',
@@ -288,6 +295,7 @@ function loadUiState() {
         next.global.workflow_name = typeof parsed.global.workflow_name === 'string' ? parsed.global.workflow_name : '';
         next.global.resolution_preset = typeof parsed.global.resolution_preset === 'string' ? parsed.global.resolution_preset : '';
         next.global.flip_orientation = !!parsed.global.flip_orientation;
+        next.global.move_processed = !!parsed.global.move_processed;
         next.global.input_dir = typeof parsed.global.input_dir === 'string' ? parsed.global.input_dir : '';
         next.global.single_image = typeof parsed.global.single_image === 'string' ? parsed.global.single_image : '';
         next.global.job_name = typeof parsed.global.job_name === 'string' ? parsed.global.job_name : '';
@@ -587,6 +595,7 @@ function syncGlobalStateFromForm() {
   const workflow = document.getElementById('workflowSelect').value;
   const resolution = document.getElementById('resolutionPreset').value;
   const flip = !!document.getElementById('flipOrientation').checked;
+  const moveProcessed = !!document.getElementById('moveProcessed').checked;
   const inputDir = document.getElementById('inputDir').value.trim();
   const inputImage = document.getElementById('inputImage').value.trim();
   const jobName = document.getElementById('jobName').value.trim();
@@ -594,6 +603,7 @@ function syncGlobalStateFromForm() {
   uiState.global.workflow_name = workflow || '';
   uiState.global.resolution_preset = resolution || '';
   uiState.global.flip_orientation = flip;
+  uiState.global.move_processed = moveProcessed;
   uiState.global.input_dir = inputDir;
   uiState.global.single_image = inputImage;
   uiState.global.job_name = jobName;
@@ -604,6 +614,7 @@ function syncGlobalStateFromForm() {
 function applySavedGlobalState() {
   const resolution = document.getElementById('resolutionPreset');
   const flip = document.getElementById('flipOrientation');
+  const moveProcessed = document.getElementById('moveProcessed');
   const input = document.getElementById('inputDir');
   const image = document.getElementById('inputImage');
   const jobName = document.getElementById('jobName');
@@ -613,6 +624,7 @@ function applySavedGlobalState() {
     resolution.value = preset;
   }
   flip.checked = !!uiState.global.flip_orientation;
+  moveProcessed.checked = !!uiState.global.move_processed;
   if (uiState.global.input_dir) input.value = uiState.global.input_dir;
   else input.value = defaultBatchInputDir || '';
   if (uiState.global.single_image) image.value = uiState.global.single_image;
@@ -628,6 +640,7 @@ function resetSavedOptions() {
   const input = document.getElementById('inputDir');
   const image = document.getElementById('inputImage');
   const flip = document.getElementById('flipOrientation');
+  const moveProcessed = document.getElementById('moveProcessed');
   const jobName = document.getElementById('jobName');
 
   if (workflowSelect.options.length > 0) workflowSelect.selectedIndex = 0;
@@ -635,6 +648,7 @@ function resetSavedOptions() {
   input.value = defaultBatchInputDir || '';
   image.value = '';
   flip.checked = false;
+  moveProcessed.checked = false;
   jobName.value = '';
   setActiveTab('batch', false);
   currentWorkflowName = workflowSelect.value || '';
@@ -857,6 +871,7 @@ function buildSettingsPayloadFromForm() {
     workflow_name: document.getElementById('workflowSelect').value || '',
     resolution_preset: document.getElementById('resolutionPreset').value || '',
     flip_orientation: !!document.getElementById('flipOrientation').checked,
+    move_processed: !!document.getElementById('moveProcessed').checked,
     input_dir: document.getElementById('inputDir').value || '',
     single_image: document.getElementById('inputImage').value || '',
     job_name: document.getElementById('jobName').value || '',
@@ -872,6 +887,7 @@ function applySettingsPayload(payload) {
   const wfSel = document.getElementById('workflowSelect');
   const resSel = document.getElementById('resolutionPreset');
   const flip = document.getElementById('flipOrientation');
+  const moveProcessed = document.getElementById('moveProcessed');
   const inputDir = document.getElementById('inputDir');
   const inputImage = document.getElementById('inputImage');
   const jobName = document.getElementById('jobName');
@@ -897,6 +913,7 @@ function applySettingsPayload(payload) {
     resSel.value = preset;
   }
   flip.checked = !!payload.flip_orientation;
+  moveProcessed.checked = !!payload.move_processed;
   inputDir.value = String(payload.input_dir || '');
   inputImage.value = String(payload.single_image || '');
   jobName.value = String(payload.job_name || '');
@@ -1097,6 +1114,7 @@ async function submitJob() {
   const supportsResolution = !!(wf && wf.supports_resolution);
   const resolutionPreset = document.getElementById('resolutionPreset').value;
   const flipOrientation = !!document.getElementById('flipOrientation').checked;
+  const moveProcessed = !!document.getElementById('moveProcessed').checked;
 
   const params = readParamsFromForm();
   const jobName = document.getElementById('jobName').value.trim();
@@ -1139,6 +1157,7 @@ async function submitJob() {
         params,
         resolution_preset: supportsResolution ? resolutionPreset : null,
         flip_orientation: supportsResolution ? flipOrientation : false,
+        move_processed: moveProcessed,
         split_by_input: activeTab === 'batch'
       })
     });
@@ -1521,6 +1540,7 @@ document.getElementById('settingsPresetSelect').addEventListener('change', apply
 document.getElementById('saveSettingsPresetBtn').addEventListener('click', saveSettingsPresetFromUI);
 document.getElementById('resolutionPreset').addEventListener('change', syncGlobalStateFromForm);
 document.getElementById('flipOrientation').addEventListener('change', syncGlobalStateFromForm);
+document.getElementById('moveProcessed').addEventListener('change', syncGlobalStateFromForm);
 document.getElementById('pauseBtn').addEventListener('click', () => jfetch('/api/queue/pause', {method:'POST'}).then(() => { lastHealthSig = ''; return refreshHealth(); }));
 document.getElementById('resumeBtn').addEventListener('click', () => jfetch('/api/queue/resume', {method:'POST'}).then(() => { lastHealthSig = ''; return refreshHealth(); }));
 document.getElementById('reloadWorkflowsBtn').addEventListener('click', reloadWorkflowsFromUI);

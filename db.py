@@ -441,6 +441,23 @@ class QueueDB:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def has_active_prompts_for_input(self, input_file: str, exclude_job_id: int | None = None) -> bool:
+        sql = """
+            SELECT 1
+            FROM prompts p
+            JOIN jobs j ON j.id = p.job_id
+            WHERE p.input_file=?
+              AND p.status IN ('pending','running')
+              AND j.status IN ('pending','running')
+        """
+        params: list[Any] = [str(input_file)]
+        if exclude_job_id is not None:
+            sql += " AND p.job_id!=?"
+            params.append(int(exclude_job_id))
+        sql += " LIMIT 1"
+        row = self.conn.execute(sql, params).fetchone()
+        return row is not None
+
     def list_prompt_presets(self, limit: int = 200) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             """
