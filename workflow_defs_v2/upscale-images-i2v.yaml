@@ -1,0 +1,63 @@
+name: upscale-images-i2v
+display_name: "Upscale Images (I2V Prep)"
+group: "Utilities"
+description: "Batch AI-upscale source images before WAN I2V (ESRNet/ESRGAN)"
+input_type: image
+input_extensions: [.png, .jpg, .jpeg, .webp, .bmp]
+
+template_inline:
+  "1":
+    class_type: LoadImage
+    inputs:
+      image: example.png
+  "2":
+    class_type: UpscaleModelLoader
+    inputs:
+      model_name: RealESRGAN_x2plus.pth
+  "3":
+    class_type: ImageUpscaleWithModel
+    inputs:
+      upscale_model: ["2", 0]
+      image: ["1", 0]
+  "4":
+    class_type: ImageScaleBy
+    inputs:
+      image: ["3", 0]
+      upscale_method: lanczos
+      scale_by: 1.0
+  "5":
+    class_type: SaveImage
+    inputs:
+      images: ["4", 0]
+      filename_prefix: image/upscaled_i2v
+
+file_bindings:
+  load_image:
+    nodes: ["1"]
+    field: image
+  output_prefix:
+    nodes: ["5"]
+    field: filename_prefix
+
+parameters:
+  upscale_model_name:
+    label: "AI upscale model (.pth)"
+    type: text
+    nodes: ["2"]
+    field: model_name
+    default: "RealESRGAN_x2plus.pth"
+  final_scale_factor:
+    label: "Post-AI scale factor"
+    type: float
+    nodes: ["4"]
+    field: scale_by
+    default: 0.75
+    min: 0.25
+    max: 2.0
+  output_prefix:
+    label: "Output prefix"
+    type: text
+    default: "image/upscaled_i2v"
+
+switch_states: {}
+move_processed: false

@@ -219,6 +219,118 @@ Reduce `app.py` complexity by splitting API into domain routers and services.
 - [ ] Startup/shutdown lifecycle still initializes DB, workflows, and worker correctly.
 - [ ] Route modules are cohesive and dependency wiring is explicit.
 
+---
+
+## Workflow Prompt-Stage Expansion Plan (New Feature)
+
+## Task A: Add New 2-Pass Split-Prompt Workflow
+## Objective
+Create a new copy of current WAN 2-pass workflow where stage 1 and stage 2 use different prompts.
+
+## Deliverables
+- New workflow definition in `workflow_defs_v2/` (do not replace current one yet).
+- New template JSON with distinct stage prompt nodes/parameters:
+  - `positive_prompt_stage1`
+  - `positive_prompt_stage2`
+- Keep existing base 4-step LoRA chain and extra LoRA chain behavior unchanged.
+
+## Acceptance Criteria
+- [ ] Both stage prompts are independently editable and persist into queued prompt JSON.
+- [ ] Stage 1 uses stage-1 prompt only; stage 2 uses stage-2 prompt only.
+- [ ] Legacy 2-pass workflow remains available during transition.
+
+## Testing Requirements
+- [ ] Prompt-build unit test verifying stage-specific node text values.
+- [ ] API submit integration test verifying persisted `prompt_json` contains both stage prompt values correctly.
+
+---
+
+## Task B: Add New 3-Pass Workflow (Extended Length)
+## Objective
+Introduce a 3-stage WAN workflow that extends sequence length and supports 3 stage prompts.
+
+## Deliverables
+- New 3-pass template JSON (stage chain 1 -> 2 -> 3).
+- New workflow YAML with parameters:
+  - `positive_prompt_stage1`
+  - `positive_prompt_stage2`
+  - `positive_prompt_stage3`
+- Preserve existing seed/resolution/output-prefix/extra-LoRA semantics.
+
+## Acceptance Criteria
+- [ ] 3-stage graph validates and queues in Comfy.
+- [ ] All three prompt values map to correct stage nodes.
+- [ ] Output generation path remains compatible with existing queue worker.
+
+## Testing Requirements
+- [ ] Prompt-build test verifying stage1/2/3 prompt mapping.
+- [ ] Regression test verifying seed bindings cover all sampler stages.
+
+---
+
+## Task C: UI Support for New Stage-Prompt Workflows
+## Objective
+Expose stage prompt inputs clearly in UI for 2-pass-split and 3-pass workflows.
+
+## Deliverables
+- Stage prompt grouping/labels in submit form.
+- Maintain compatibility with existing prompt preset/save behavior.
+- Ensure queue detail view shows saved params for stage prompts.
+
+## Acceptance Criteria
+- [ ] Users can submit with different stage prompts without manual JSON edits.
+- [ ] Saved prompt presets do not break with new stage fields.
+- [ ] Existing workflows continue to render correctly.
+
+## Testing Requirements
+- [ ] Frontend test verifying stage fields render for matching workflows.
+- [ ] Frontend submit payload test for stage prompt fields.
+
+---
+
+## Task D (Phase 2): Dynamic Arbitrary Stage Count ("Add Stage")
+## Objective
+Design and implement an advanced dynamic stage builder so users can add N stages from UI at submit time.
+
+## Deliverables
+- Design doc for dynamic graph generation strategy (node cloning/rewiring rules).
+- Backend builder capable of generating prompt graph for arbitrary stage count.
+- UI controls:
+  - Add/remove stage
+  - Stage prompt inputs per stage
+- Maintain extra LoRA configuration at end of chain.
+
+## Acceptance Criteria
+- [ ] User can add stages dynamically without editing workflow files.
+- [ ] Generated graph validates in Comfy for supported stage counts.
+- [ ] Stage continuity (seed, model chain, prompt mapping) is deterministic.
+
+## Testing Requirements
+- [ ] Property-style tests for generated graph validity across multiple stage counts.
+- [ ] Integration tests for submit/build/queue path with dynamic stages.
+- [ ] Performance test to ensure prompt build remains responsive for higher stage counts.
+
+---
+
+## Task E: Source Image Upscale Mode for I2V Prep
+## Objective
+Add a dedicated image-upscale workflow/mode for preparing source images before WAN I2V.
+
+## Deliverables
+- New image-upscale workflow definition in `workflow_defs_v2/` for image inputs.
+- New UI mode/tab (separate from video upscale/interpolate) that targets this workflow.
+- Default upscale factor set to `1.5x` with configurable output prefix.
+
+## Acceptance Criteria
+- [ ] Users can select `Upscale Images` mode and submit a directory of images.
+- [ ] Each image is queued through the new image-upscale workflow.
+- [ ] Existing `Batch`, `Single I2V`, and `Upscale` (video) modes continue working.
+
+## Testing Requirements
+- [ ] Workflow definition loads successfully via `load_all`.
+- [ ] Frontend state tests pass with new mode present.
+- [ ] Static UI contract tests still pass.
+
 ## Comprehensive Testing Requirements
 - [ ] Route-level contract tests for all existing endpoints.
 - [ ] Startup/shutdown integration tests validate worker starts/stops and DB closes.

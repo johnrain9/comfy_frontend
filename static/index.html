@@ -95,6 +95,8 @@
       <div class="tabs">
         <button id="tabBatch" type="button" class="tab-btn active">Batch</button>
         <button id="tabSingle" type="button" class="tab-btn">Single I2V</button>
+        <button id="tabUpscale" type="button" class="tab-btn">Upscale</button>
+        <button id="tabUpscaleImages" type="button" class="tab-btn">Upscale Images</button>
       </div>
       <div class="row">
         <div>
@@ -150,7 +152,7 @@
           <div class="hint">Select exactly one image for single I2V job submission.</div>
         </div>
 
-        <div class="row-2">
+        <div id="promptPresetSection" class="row-2">
           <div>
             <label>Saved Prompts</label>
             <select id="promptPresetSelect">
@@ -299,7 +301,9 @@ function loadUiState() {
         next.global.input_dir = typeof parsed.global.input_dir === 'string' ? parsed.global.input_dir : '';
         next.global.single_image = typeof parsed.global.single_image === 'string' ? parsed.global.single_image : '';
         next.global.job_name = typeof parsed.global.job_name === 'string' ? parsed.global.job_name : '';
-        next.global.active_tab = parsed.global.active_tab === 'single' ? 'single' : 'batch';
+        next.global.active_tab = (parsed.global.active_tab === 'single' || parsed.global.active_tab === 'upscale' || parsed.global.active_tab === 'upscale_images')
+          ? parsed.global.active_tab
+          : 'batch';
       }
       if (parsed.workflow_params && typeof parsed.workflow_params === 'object') {
         for (const [wfName, wfParams] of Object.entries(parsed.workflow_params)) {
@@ -424,8 +428,8 @@ function getParamElement(name) {
 }
 
 function getPromptFieldValues() {
-  const pos = getParamElement('positive_prompt');
-  const neg = getParamElement('negative_prompt');
+  const pos = getParamElement('positive_prompt') || getParamElement('positive_prompt_stage1');
+  const neg = getParamElement('negative_prompt') || getParamElement('negative_prompt_stage1');
   return {
     positive_prompt: pos ? String(pos.value ?? '') : '',
     negative_prompt: neg ? String(neg.value ?? '') : '',
@@ -433,8 +437,8 @@ function getPromptFieldValues() {
 }
 
 function applyPromptFieldValues(values) {
-  const pos = getParamElement('positive_prompt');
-  const neg = getParamElement('negative_prompt');
+  const pos = getParamElement('positive_prompt') || getParamElement('positive_prompt_stage1');
+  const neg = getParamElement('negative_prompt') || getParamElement('negative_prompt_stage1');
 
   if (pos) {
     pos.value = String(values.positive_prompt ?? '');
@@ -554,15 +558,61 @@ function renderSettingsPresets(selectedName='') {
   }
 }
 
+function workflowHasPromptFields(wf) {
+  if (!wf || !wf.parameters || typeof wf.parameters !== 'object') return false;
+  return Object.keys(wf.parameters).some(name => /prompt/i.test(name));
+}
+
+function updatePromptPresetVisibility() {
+  const section = document.getElementById('promptPresetSection');
+  const wf = workflowMap[document.getElementById('workflowSelect').value];
+  const hasPrompts = workflowHasPromptFields(wf);
+  section.classList.toggle('hidden', !hasPrompts);
+}
+
+function preferredWorkflowsForTab(tabName) {
+  if (tabName === 'upscale') return ['upscale-interpolate-only', 'upscale-interpolate'];
+  if (tabName === 'upscale_images') return ['upscale-images-i2v'];
+  return [];
+}
+
+function ensurePreferredWorkflowForTab(tabName) {
+  const wfSel = document.getElementById('workflowSelect');
+  const preferred = preferredWorkflowsForTab(tabName);
+  if (!preferred.length) return false;
+  for (const name of preferred) {
+    if (workflowMap[name]) {
+      if (wfSel.value !== name) {
+        wfSel.value = name;
+        return true;
+      }
+      return false;
+    }
+  }
+  return false;
+}
+
 function setActiveTab(tabName, persist=true) {
-  const next = tabName === 'single' ? 'single' : 'batch';
+  const next = tabName === 'single'
+    ? 'single'
+    : (tabName === 'upscale' ? 'upscale' : (tabName === 'upscale_images' ? 'upscale_images' : 'batch'));
   activeTab = next;
   const isSingle = activeTab === 'single';
+  const isUpscale = activeTab === 'upscale';
+  const isUpscaleImages = activeTab === 'upscale_images';
 
   document.getElementById('batchInputSection').classList.toggle('hidden', isSingle);
   document.getElementById('singleInputSection').classList.toggle('hidden', !isSingle);
-  document.getElementById('tabBatch').classList.toggle('active', !isSingle);
+  document.getElementById('tabBatch').classList.toggle('active', activeTab === 'batch');
   document.getElementById('tabSingle').classList.toggle('active', isSingle);
+  document.getElementById('tabUpscale').classList.toggle('active', isUpscale);
+  document.getElementById('tabUpscaleImages').classList.toggle('active', isUpscaleImages);
+  if (ensurePreferredWorkflowForTab(activeTab)) {
+    currentWorkflowName = document.getElementById('workflowSelect').value || '';
+    renderParamFields();
+  } else {
+    updatePromptPresetVisibility();
+  }
 
   if (persist) {
     uiState.global.active_tab = activeTab;
@@ -629,7 +679,12 @@ function applySavedGlobalState() {
   else input.value = defaultBatchInputDir || '';
   if (uiState.global.single_image) image.value = uiState.global.single_image;
   if (uiState.global.job_name) jobName.value = uiState.global.job_name;
-  setActiveTab(uiState.global.active_tab === 'single' ? 'single' : 'batch', false);
+  const t = uiState.global.active_tab === 'single'
+    ? 'single'
+    : (uiState.global.active_tab === 'upscale'
+      ? 'upscale'
+      : (uiState.global.active_tab === 'upscale_images' ? 'upscale_images' : 'batch'));
+  setActiveTab(t, false);
 }
 
 function resetSavedOptions() {
@@ -667,6 +722,37 @@ function renderParamFields() {
   const savedParams = (uiState.workflow_params && typeof uiState.workflow_params[wf.name] === 'object')
     ? uiState.workflow_params[wf.name]
     : {};
+  let upscaleNetHintEl = null;
+
+  function inferModelScale(name) {
+    const text = String(name || '').toLowerCase();
+    const m = text.match(/(?:^|[^0-9])x(\d+)(?:[^0-9]|$)/);
+    if (!m) return null;
+    const n = parseFloat(m[1]);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function updateUpscaleNetHint() {
+    if (!upscaleNetHintEl) return;
+    const modelEl = getParamElement('upscale_model_name');
+    const postEl = getParamElement('final_scale_factor');
+    if (!modelEl || !postEl) {
+      upscaleNetHintEl.textContent = '';
+      return;
+    }
+    const modelScale = inferModelScale(modelEl.value);
+    const postScale = parseFloat(String(postEl.value || ''));
+    if (!Number.isFinite(postScale) || postScale <= 0) {
+      upscaleNetHintEl.textContent = 'Net upscale: enter a valid post-AI scale factor.';
+      return;
+    }
+    if (!modelScale) {
+      upscaleNetHintEl.textContent = `Net upscale: source * model_scale * ${postScale.toFixed(2)} (model scale unknown from name).`;
+      return;
+    }
+    const net = modelScale * postScale;
+    upscaleNetHintEl.textContent = `Net upscale: ${net.toFixed(2)}x = source * ${modelScale.toFixed(0)} * ${postScale.toFixed(2)}.`;
+  }
 
   function makeParamWrap(name, p) {
     const wrap = document.createElement('div');
@@ -712,7 +798,15 @@ function renderParamFields() {
     }
     el.dataset.paramName = name;
     el.dataset.paramType = p.type;
-    const persistParam = () => saveCurrentWorkflowParams();
+    if (name === 'final_scale_factor') {
+      upscaleNetHintEl = document.createElement('div');
+      upscaleNetHintEl.className = 'hint';
+      wrap.appendChild(upscaleNetHintEl);
+    }
+    const persistParam = () => {
+      saveCurrentWorkflowParams();
+      updateUpscaleNetHint();
+    };
     el.addEventListener('change', persistParam);
     el.addEventListener('input', persistParam);
     return wrap;
@@ -734,6 +828,13 @@ function renderParamFields() {
     container.appendChild(hint);
   }
 
+  function stageIndexForPrompt(name) {
+    const m = /^positive_prompt_stage(\d+)$/.exec(name) || /^negative_prompt_stage(\d+)$/.exec(name);
+    if (!m) return 0;
+    const idx = parseInt(m[1], 10);
+    return Number.isFinite(idx) && idx > 0 ? idx : 0;
+  }
+
   const extraContainers = {};
   for (const idx of [1, 2, 3]) {
     const details = document.createElement('details');
@@ -747,6 +848,8 @@ function renderParamFields() {
     extraContainers[idx] = { details, body, used: false };
   }
 
+  const stageContainers = {};
+
   for (const [name, p] of Object.entries(wf.parameters || {})) {
     const wrap = makeParamWrap(name, p);
     const idx = extraGroupIndex(name);
@@ -758,7 +861,28 @@ function renderParamFields() {
       }
       continue;
     }
+    const stageIdx = stageIndexForPrompt(name);
+    if (stageIdx > 0) {
+      if (!stageContainers[stageIdx]) {
+        const details = document.createElement('details');
+        details.open = true;
+        const summary = document.createElement('summary');
+        summary.textContent = `Stage ${stageIdx} Prompts`;
+        details.appendChild(summary);
+        const body = document.createElement('div');
+        body.className = 'row';
+        details.appendChild(body);
+        stageContainers[stageIdx] = { details, body };
+      }
+      stageContainers[stageIdx].body.appendChild(wrap);
+      continue;
+    }
     box.appendChild(wrap);
+  }
+
+  const stageIndexes = Object.keys(stageContainers).map(Number).sort((a, b) => a - b);
+  for (const idx of stageIndexes) {
+    box.appendChild(stageContainers[idx].details);
   }
 
   for (const idx of [1, 2, 3]) {
@@ -769,6 +893,8 @@ function renderParamFields() {
 
   saveCurrentWorkflowParams();
   updateResolutionControlsForWorkflow();
+  updatePromptPresetVisibility();
+  updateUpscaleNetHint();
 }
 
 async function normalizeInputDirField() {
@@ -995,8 +1121,8 @@ async function savePromptPresetFromUI() {
   }
 
   const values = getPromptFieldValues();
-  const posField = getParamElement('positive_prompt');
-  const negField = getParamElement('negative_prompt');
+  const posField = getParamElement('positive_prompt') || getParamElement('positive_prompt_stage1');
+  const negField = getParamElement('negative_prompt') || getParamElement('negative_prompt_stage1');
   if (!posField && !negField) {
     msg.textContent = 'Current workflow has no prompt fields to save.';
     return;
@@ -1158,7 +1284,7 @@ async function submitJob() {
         resolution_preset: supportsResolution ? resolutionPreset : null,
         flip_orientation: supportsResolution ? flipOrientation : false,
         move_processed: moveProcessed,
-        split_by_input: activeTab === 'batch'
+        split_by_input: activeTab !== 'single'
       })
     });
     const ids = Array.isArray(data.job_ids) ? data.job_ids : [];
@@ -1527,6 +1653,14 @@ document.getElementById('tabBatch').addEventListener('click', () => {
 });
 document.getElementById('tabSingle').addEventListener('click', () => {
   setActiveTab('single');
+  syncGlobalStateFromForm();
+});
+document.getElementById('tabUpscale').addEventListener('click', () => {
+  setActiveTab('upscale');
+  syncGlobalStateFromForm();
+});
+document.getElementById('tabUpscaleImages').addEventListener('click', () => {
+  setActiveTab('upscale_images');
   syncGlobalStateFromForm();
 });
 document.getElementById('inputDir').addEventListener('input', syncGlobalStateFromForm);

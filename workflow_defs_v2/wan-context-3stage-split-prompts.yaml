@@ -1,0 +1,124 @@
+name: wan-context-3stage-split-prompts
+display_name: "WAN ContextWindow2 Extend (3-pass, split prompts)"
+group: "WAN V2"
+description: "ContextWindow2 workflow with 3 passes and separate stage prompts + optional extra LoRAs"
+template: /home/cobra/video_queue/workflow_defs_v2/templates/wan22_enhancedH_q5L_3stage_gguf_vertical_ctxwindow2_split_prompts.api.json
+input_type: image
+input_extensions: [.png, .jpg, .jpeg, .webp, .bmp]
+
+file_bindings:
+  load_image:
+    nodes: ["97"]
+    field: image
+  output_prefix:
+    nodes: ["108"]
+    field: filename_prefix
+  seed:
+    nodes: ["86", "85", "120", "121", "130", "131"]
+    fields: [noise_seed, seed]
+
+parameters:
+  positive_prompt_stage1:
+    label: "Positive prompt (stage 1)"
+    type: text
+    nodes: ["93"]
+    field: text
+    default: ""
+  positive_prompt_stage2:
+    label: "Positive prompt (stage 2)"
+    type: text
+    nodes: ["193"]
+    field: text
+    default: ""
+  positive_prompt_stage3:
+    label: "Positive prompt (stage 3)"
+    type: text
+    nodes: ["293"]
+    field: text
+    default: ""
+  negative_prompt:
+    label: "Negative prompt"
+    type: text
+    nodes: ["89"]
+    field: text
+    default: ""
+  randomize_seed:
+    label: "Randomize seeds"
+    type: bool
+    default: true
+  tries:
+    label: "Tries per image"
+    type: int
+    default: 1
+    min: 1
+    max: 10
+  output_prefix:
+    label: "Output prefix"
+    type: text
+    default: "video/auto_batch"
+
+  extra_lora_high_name:
+    label: "Extra LoRA (high-noise)"
+    type: text
+    nodes: ["201"]
+    field: lora_name
+    default: ""
+  extra_lora_low_name:
+    label: "Extra LoRA (low-noise)"
+    type: text
+    nodes: ["202"]
+    field: lora_name
+    default: ""
+  extra_lora_strength:
+    label: "Extra LoRA strength"
+    type: float
+    nodes: ["201", "202"]
+    field: strength_model
+    default: 0.0
+    min: 0.0
+    max: 2.0
+
+  extra_lora2_high_name:
+    label: "Extra LoRA 2 (high-noise)"
+    type: text
+    nodes: ["211"]
+    field: lora_name
+    default: ""
+  extra_lora2_low_name:
+    label: "Extra LoRA 2 (low-noise)"
+    type: text
+    nodes: ["212"]
+    field: lora_name
+    default: ""
+  extra_lora2_strength:
+    label: "Extra LoRA 2 strength"
+    type: float
+    nodes: ["211", "212"]
+    field: strength_model
+    default: 0.0
+    min: 0.0
+    max: 2.0
+
+  extra_lora3_high_name:
+    label: "Extra LoRA 3 (high-noise)"
+    type: text
+    nodes: ["221"]
+    field: lora_name
+    default: ""
+  extra_lora3_low_name:
+    label: "Extra LoRA 3 (low-noise)"
+    type: text
+    nodes: ["222"]
+    field: lora_name
+    default: ""
+  extra_lora3_strength:
+    label: "Extra LoRA 3 strength"
+    type: float
+    nodes: ["221", "222"]
+    field: strength_model
+    default: 0.0
+    min: 0.0
+    max: 2.0
+
+switch_states: {}
+move_processed: false
