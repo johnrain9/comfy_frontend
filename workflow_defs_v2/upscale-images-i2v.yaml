@@ -1,6 +1,7 @@
 name: upscale-images-i2v
 display_name: "Upscale Images (I2V Prep)"
 group: "Utilities"
+category: "image_upscale"
 description: "Batch AI-upscale source images before WAN I2V (ESRNet/ESRGAN)"
 input_type: image
 input_extensions: [.png, .jpg, .jpeg, .webp, .bmp]

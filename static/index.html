@@ -423,6 +423,37 @@ function workflowLabel(wf) {
   return `${group}${display} - ${wf.description || ''}`.trim();
 }
 
+function workflowCategoryForName(name) {
+  const text = String(name || '').toLowerCase();
+  if (text.includes('upscale-images')) return 'image_upscale';
+  if (text.includes('upscale')) return 'video_upscale';
+  return 'video_gen';
+}
+
+function workflowCategory(wf) {
+  if (!wf || typeof wf !== 'object') return 'video_gen';
+  const explicit = String(wf.category || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  return workflowCategoryForName(wf.name || '');
+}
+
+function promptModeForTab(tabName) {
+  if (tabName === 'upscale') return 'video_upscale';
+  if (tabName === 'upscale_images') return 'image_upscale';
+  return 'video_gen';
+}
+
+function promptModeForActiveTab() {
+  return promptModeForTab(activeTab);
+}
+
+function allowedWorkflowCategoriesForTab(tabName) {
+  const mode = promptModeForTab(tabName);
+  if (mode === 'video_upscale') return ['video_upscale'];
+  if (mode === 'image_upscale') return ['image_upscale'];
+  return ['video_gen'];
+}
+
 function getParamElement(name) {
   return document.querySelector(`#paramFields [data-param-name="${name}"]`);
 }
@@ -522,7 +553,8 @@ function renderPromptPresets(selectedName='') {
   for (const item of promptPresets) {
     const opt = document.createElement('option');
     opt.value = String(item.name || '');
-    opt.textContent = String(item.name || '');
+    const mode = String(item.mode || '').trim();
+    opt.textContent = mode ? `${item.name} [${mode}]` : String(item.name || '');
     sel.appendChild(opt);
   }
 
@@ -563,6 +595,11 @@ function workflowHasPromptFields(wf) {
   return Object.keys(wf.parameters).some(name => /prompt/i.test(name));
 }
 
+function workflowsForActiveTab() {
+  const allowed = new Set(allowedWorkflowCategoriesForTab(activeTab));
+  return workflows.filter((wf) => allowed.has(workflowCategory(wf)));
+}
+
 function updatePromptPresetVisibility() {
   const section = document.getElementById('promptPresetSection');
   const wf = workflowMap[document.getElementById('workflowSelect').value];
@@ -576,20 +613,37 @@ function preferredWorkflowsForTab(tabName) {
   return [];
 }
 
-function ensurePreferredWorkflowForTab(tabName) {
+function applyWorkflowFilterForActiveTab(preferredName='') {
   const wfSel = document.getElementById('workflowSelect');
-  const preferred = preferredWorkflowsForTab(tabName);
-  if (!preferred.length) return false;
+  const previous = wfSel.value || '';
+  const filtered = workflowsForActiveTab();
+  wfSel.innerHTML = '';
+  for (const wf of filtered) {
+    const opt = document.createElement('option');
+    opt.value = wf.name;
+    opt.textContent = workflowLabel(wf);
+    wfSel.appendChild(opt);
+  }
+
+  const preferred = preferredWorkflowsForTab(activeTab);
+  let target = '';
   for (const name of preferred) {
-    if (workflowMap[name]) {
-      if (wfSel.value !== name) {
-        wfSel.value = name;
-        return true;
-      }
-      return false;
+    if (filtered.some((wf) => wf.name === name)) {
+      target = name;
+      break;
     }
   }
-  return false;
+  if (!target && preferredName && filtered.some((wf) => wf.name === preferredName)) {
+    target = preferredName;
+  }
+  if (!target && previous && filtered.some((wf) => wf.name === previous)) {
+    target = previous;
+  }
+  if (!target && filtered.length > 0) {
+    target = filtered[0].name;
+  }
+  if (target) wfSel.value = target;
+  return previous !== wfSel.value;
 }
 
 function setActiveTab(tabName, persist=true) {
@@ -607,12 +661,13 @@ function setActiveTab(tabName, persist=true) {
   document.getElementById('tabSingle').classList.toggle('active', isSingle);
   document.getElementById('tabUpscale').classList.toggle('active', isUpscale);
   document.getElementById('tabUpscaleImages').classList.toggle('active', isUpscaleImages);
-  if (ensurePreferredWorkflowForTab(activeTab)) {
+  if (applyWorkflowFilterForActiveTab()) {
     currentWorkflowName = document.getElementById('workflowSelect').value || '';
     renderParamFields();
   } else {
     updatePromptPresetVisibility();
   }
+  loadPromptPresets().catch(() => {});
 
   if (persist) {
     uiState.global.active_tab = activeTab;
@@ -970,9 +1025,11 @@ async function loadRecentInputDirs() {
   renderInputDirHistory();
 }
 
-async function loadPromptPresets(selectedName='') {
+async function loadPromptPresets(selectedName='', modeOverride='') {
+  const mode = String(modeOverride || promptModeForActiveTab() || '').trim();
+  const query = mode ? `?limit=500&mode=${encodeURIComponent(mode)}` : '?limit=500';
   try {
-    const data = await jfetch('/api/prompt-presets?limit=500');
+    const data = await jfetch(`/api/prompt-presets${query}`);
     promptPresets = Array.isArray(data.items) ? data.items : [];
   } catch {
     promptPresets = [];
@@ -1001,7 +1058,7 @@ function buildSettingsPayloadFromForm() {
     input_dir: document.getElementById('inputDir').value || '',
     single_image: document.getElementById('inputImage').value || '',
     job_name: document.getElementById('jobName').value || '',
-    active_tab: activeTab === 'single' ? 'single' : 'batch',
+    active_tab: activeTab,
     prompt_preset_name: document.getElementById('promptPresetSelect').value || '',
     workflow_params: uiState.workflow_params || {},
   };
@@ -1023,16 +1080,19 @@ function applySettingsPayload(payload) {
     uiState.workflow_params = payload.workflow_params;
   }
 
+  const tab = payload.active_tab === 'single'
+    ? 'single'
+    : (payload.active_tab === 'upscale'
+      ? 'upscale'
+      : (payload.active_tab === 'upscale_images' ? 'upscale_images' : 'batch'));
+  setActiveTab(tab, false);
+
   const wfName = String(payload.workflow_name || '');
-  if (wfName && workflowMap[wfName]) {
+  if (wfName && workflowMap[wfName] && [...wfSel.options].some(o => o.value === wfName)) {
     wfSel.value = wfName;
   }
-
   currentWorkflowName = wfSel.value || '';
   renderParamFields();
-
-  const tab = payload.active_tab === 'single' ? 'single' : 'batch';
-  setActiveTab(tab, false);
 
   const preset = String(payload.resolution_preset || '');
   if (preset && [...resSel.options].some(o => o.value === preset)) {
@@ -1045,12 +1105,14 @@ function applySettingsPayload(payload) {
   jobName.value = String(payload.job_name || '');
 
   const promptPresetName = String(payload.prompt_preset_name || '');
-  if (promptPresetName && [...promptPresetSel.options].some(o => o.value === promptPresetName)) {
-    promptPresetSel.value = promptPresetName;
-    applySelectedPromptPreset();
-  } else if (!promptPresetName) {
-    promptPresetSel.value = '';
-  }
+  loadPromptPresets(promptPresetName, promptModeForActiveTab()).then(() => {
+    if (promptPresetName && [...promptPresetSel.options].some(o => o.value === promptPresetName)) {
+      promptPresetSel.value = promptPresetName;
+      applySelectedPromptPreset();
+    } else if (!promptPresetName) {
+      promptPresetSel.value = '';
+    }
+  }).catch(() => {});
 
   syncGlobalStateFromForm();
 }
@@ -1132,17 +1194,19 @@ async function savePromptPresetFromUI() {
   btn.disabled = true;
   btn.textContent = 'Saving...';
   try {
+    const mode = promptModeForActiveTab();
     await jfetch('/api/prompt-presets', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         name,
+        mode,
         positive_prompt: values.positive_prompt,
         negative_prompt: values.negative_prompt,
       })
     });
-    await loadPromptPresets(name);
-    msg.textContent = `Saved prompt preset '${name}'.`;
+    await loadPromptPresets(name, mode);
+    msg.textContent = `Saved prompt preset '${name}' [${mode}].`;
   } catch (e) {
     msg.textContent = `Save preset error: ${e.message}`;
   } finally {
@@ -1173,17 +1237,8 @@ async function loadWorkflows(preferredName) {
   workflows = await jfetch('/api/workflows');
   workflowMap = Object.fromEntries(workflows.map(w => [w.name, w]));
   const sel = document.getElementById('workflowSelect');
-  const fallback = preferredName || uiState.global.workflow_name || sel.value;
-  sel.innerHTML = '';
-  for (const wf of workflows) {
-    const opt = document.createElement('option');
-    opt.value = wf.name;
-    opt.textContent = workflowLabel(wf);
-    sel.appendChild(opt);
-  }
-  if (fallback && workflowMap[fallback]) {
-    sel.value = fallback;
-  }
+  const fallback = preferredName || uiState.global.workflow_name || sel.value || '';
+  applyWorkflowFilterForActiveTab(fallback);
   currentWorkflowName = sel.value || '';
   renderParamFields();
   applySavedGlobalState();
@@ -1243,7 +1298,15 @@ async function submitJob() {
   const moveProcessed = !!document.getElementById('moveProcessed').checked;
 
   const params = readParamsFromForm();
-  const jobName = document.getElementById('jobName').value.trim();
+  const rawJobName = document.getElementById('jobName').value.trim();
+  const modePrefix = activeTab === 'single'
+    ? 'single'
+    : (activeTab === 'upscale'
+      ? 'upscale'
+      : (activeTab === 'upscale_images' ? 'upscale_images' : 'batch'));
+  const prefixedJobName = rawJobName
+    ? (rawJobName.toLowerCase().startsWith(`${modePrefix} `) ? rawJobName : `${modePrefix} ${rawJobName}`)
+    : '';
   uiState.workflow_params[workflow_name] = params;
   syncGlobalStateFromForm();
 
@@ -1278,7 +1341,7 @@ async function submitJob() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         workflow_name,
-        job_name: jobName || null,
+        job_name: prefixedJobName || null,
         ...pathPayload,
         params,
         resolution_preset: supportsResolution ? resolutionPreset : null,

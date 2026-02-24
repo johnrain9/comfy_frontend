@@ -71,6 +71,7 @@ class QueueDB:
 
             CREATE TABLE IF NOT EXISTS prompt_presets (
               name TEXT PRIMARY KEY,
+              mode TEXT NOT NULL DEFAULT 'video_gen',
               positive_prompt TEXT NOT NULL DEFAULT '',
               negative_prompt TEXT NOT NULL DEFAULT '',
               updated_at TEXT NOT NULL
@@ -96,6 +97,9 @@ class QueueDB:
             self.conn.execute("ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0")
         if "job_name" not in job_cols:
             self.conn.execute("ALTER TABLE jobs ADD COLUMN job_name TEXT")
+        prompt_cols = {str(row["name"]) for row in self.conn.execute("PRAGMA table_info(prompt_presets)").fetchall()}
+        if "mode" not in prompt_cols:
+            self.conn.execute("ALTER TABLE prompt_presets ADD COLUMN mode TEXT NOT NULL DEFAULT 'video_gen'")
         self.conn.commit()
 
     def close(self) -> None:
@@ -458,37 +462,45 @@ class QueueDB:
         row = self.conn.execute(sql, params).fetchone()
         return row is not None
 
-    def list_prompt_presets(self, limit: int = 200) -> list[dict[str, Any]]:
-        rows = self.conn.execute(
-            """
-            SELECT name, positive_prompt, negative_prompt, updated_at
+    def list_prompt_presets(self, limit: int = 200, mode: str | None = None) -> list[dict[str, Any]]:
+        sql = """
+            SELECT name, mode, positive_prompt, negative_prompt, updated_at
             FROM prompt_presets
-            ORDER BY updated_at DESC, name ASC
-            LIMIT ?
-            """,
-            (max(1, int(limit)),),
-        ).fetchall()
+        """
+        params: list[Any] = []
+        clean_mode = str(mode or "").strip().lower()
+        if clean_mode:
+            sql += " WHERE mode=?"
+            params.append(clean_mode)
+        sql += " ORDER BY updated_at DESC, name ASC LIMIT ?"
+        params.append(max(1, int(limit)))
+        rows = self.conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
 
-    def save_prompt_preset(self, name: str, positive_prompt: str, negative_prompt: str) -> dict[str, Any]:
+    def save_prompt_preset(self, name: str, positive_prompt: str, negative_prompt: str, mode: str = "video_gen") -> dict[str, Any]:
         clean_name = str(name or "").strip()
         if not clean_name:
             raise ValueError("preset name is required")
+        clean_mode = str(mode or "video_gen").strip().lower()
+        if not clean_mode:
+            clean_mode = "video_gen"
         now = utc_now()
         with self.conn:
             self.conn.execute(
                 """
-                INSERT INTO prompt_presets (name, positive_prompt, negative_prompt, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO prompt_presets (name, mode, positive_prompt, negative_prompt, updated_at)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(name) DO UPDATE SET
+                    mode=excluded.mode,
                     positive_prompt=excluded.positive_prompt,
                     negative_prompt=excluded.negative_prompt,
                     updated_at=excluded.updated_at
                 """,
-                (clean_name, str(positive_prompt or ""), str(negative_prompt or ""), now),
+                (clean_name, clean_mode, str(positive_prompt or ""), str(negative_prompt or ""), now),
             )
         return {
             "name": clean_name,
+            "mode": clean_mode,
             "positive_prompt": str(positive_prompt or ""),
             "negative_prompt": str(negative_prompt or ""),
             "updated_at": now,

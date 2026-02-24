@@ -1,6 +1,7 @@
 name: upscale-interpolate-only
 display_name: "Video Upscale / Interpolate"
 group: "Utilities"
+category: "video_upscale"
 description: "Batch video upscale or interpolation using switchable mode"
 input_type: video
 input_extensions: [.mp4, .mov, .mkv, .webm, .avi, .m4v, .mpg, .mpeg, .wmv]

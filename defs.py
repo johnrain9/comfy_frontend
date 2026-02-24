@@ -46,6 +46,7 @@ class WorkflowDef:
     name: str
     display_name: str | None
     group: str | None
+    category: str | None
     description: str
     template_path: str | None
     input_type: str
@@ -213,6 +214,10 @@ def load_one(path: Path) -> WorkflowDef:
     if group is not None and not isinstance(group, str):
         raise _err(path, "group", "must be a string")
 
+    category = raw.get("category")
+    if category is not None and not isinstance(category, str):
+        raise _err(path, "category", "must be a string")
+
     input_type = raw["input_type"]
     if input_type not in {"image", "video"}:
         raise _err(path, "input_type", "must be 'image' or 'video'")
@@ -255,6 +260,7 @@ def load_one(path: Path) -> WorkflowDef:
         name=name,
         display_name=display_name,
         group=group,
+        category=category,
         description=description,
         template_path=template_path,
         input_type=input_type,

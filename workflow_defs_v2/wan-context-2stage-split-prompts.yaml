@@ -1,6 +1,7 @@
 name: wan-context-2stage-split-prompts
 display_name: "WAN ContextWindow2 Refine (2-pass, split prompts)"
 group: "WAN V2"
+category: "video_gen"
 description: "ContextWindow2 workflow with separate stage-1 and stage-2 prompts + optional extra LoRAs"
 template: /home/cobra/video_queue/workflow_defs_v2/templates/wan22_enhancedH_q5L_2stage_gguf_vertical_ctxwindow2_split_prompts.api.json
 input_type: image

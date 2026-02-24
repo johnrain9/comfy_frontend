@@ -1,6 +1,7 @@
 name: wan-context-lite-2stage
 display_name: "WAN ContextWindow Single Pass (81f)"
 group: "WAN V2"
+category: "video_gen"
 description: "Single 81-frame pass with high/low noise samplers and selectable LoRAs"
 template: /home/cobra/video_queue/workflow_defs_v2/templates/wan22_enhancedH_q5L_2stage_gguf_vertical_ctxwindow_singlepass.api.json
 input_type: image

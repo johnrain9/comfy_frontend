@@ -235,13 +235,13 @@ Create a new copy of current WAN 2-pass workflow where stage 1 and stage 2 use d
 - Keep existing base 4-step LoRA chain and extra LoRA chain behavior unchanged.
 
 ## Acceptance Criteria
-- [ ] Both stage prompts are independently editable and persist into queued prompt JSON.
-- [ ] Stage 1 uses stage-1 prompt only; stage 2 uses stage-2 prompt only.
-- [ ] Legacy 2-pass workflow remains available during transition.
+- [x] Both stage prompts are independently editable and persist into queued prompt JSON.
+- [x] Stage 1 uses stage-1 prompt only; stage 2 uses stage-2 prompt only.
+- [x] Legacy 2-pass workflow remains available during transition.
 
 ## Testing Requirements
-- [ ] Prompt-build unit test verifying stage-specific node text values.
-- [ ] API submit integration test verifying persisted `prompt_json` contains both stage prompt values correctly.
+- [x] Prompt-build unit test verifying stage-specific node text values.
+- [x] API submit integration test verifying persisted `prompt_json` contains both stage prompt values correctly.
 
 ---
 
@@ -258,13 +258,13 @@ Introduce a 3-stage WAN workflow that extends sequence length and supports 3 sta
 - Preserve existing seed/resolution/output-prefix/extra-LoRA semantics.
 
 ## Acceptance Criteria
-- [ ] 3-stage graph validates and queues in Comfy.
-- [ ] All three prompt values map to correct stage nodes.
-- [ ] Output generation path remains compatible with existing queue worker.
+- [x] 3-stage graph validates and queues in Comfy.
+- [x] All three prompt values map to correct stage nodes.
+- [x] Output generation path remains compatible with existing queue worker.
 
 ## Testing Requirements
-- [ ] Prompt-build test verifying stage1/2/3 prompt mapping.
-- [ ] Regression test verifying seed bindings cover all sampler stages.
+- [x] Prompt-build test verifying stage1/2/3 prompt mapping.
+- [x] Regression test verifying seed bindings cover all sampler stages.
 
 ---
 
@@ -278,13 +278,13 @@ Expose stage prompt inputs clearly in UI for 2-pass-split and 3-pass workflows.
 - Ensure queue detail view shows saved params for stage prompts.
 
 ## Acceptance Criteria
-- [ ] Users can submit with different stage prompts without manual JSON edits.
-- [ ] Saved prompt presets do not break with new stage fields.
-- [ ] Existing workflows continue to render correctly.
+- [x] Users can submit with different stage prompts without manual JSON edits.
+- [x] Saved prompt presets do not break with new stage fields.
+- [x] Existing workflows continue to render correctly.
 
 ## Testing Requirements
-- [ ] Frontend test verifying stage fields render for matching workflows.
-- [ ] Frontend submit payload test for stage prompt fields.
+- [x] Frontend test verifying stage fields render for matching workflows.
+- [x] Frontend submit payload test for stage prompt fields.
 
 ---
 
@@ -322,19 +322,19 @@ Add a dedicated image-upscale workflow/mode for preparing source images before W
 - Default upscale factor set to `1.5x` with configurable output prefix.
 
 ## Acceptance Criteria
-- [ ] Users can select `Upscale Images` mode and submit a directory of images.
-- [ ] Each image is queued through the new image-upscale workflow.
-- [ ] Existing `Batch`, `Single I2V`, and `Upscale` (video) modes continue working.
+- [x] Users can select `Upscale Images` mode and submit a directory of images.
+- [x] Each image is queued through the new image-upscale workflow.
+- [x] Existing `Batch`, `Single I2V`, and `Upscale` (video) modes continue working.
 
 ## Testing Requirements
-- [ ] Workflow definition loads successfully via `load_all`.
-- [ ] Frontend state tests pass with new mode present.
-- [ ] Static UI contract tests still pass.
+- [x] Workflow definition loads successfully via `load_all`.
+- [x] Frontend state tests pass with new mode present.
+- [x] Static UI contract tests still pass.
 
 ## Comprehensive Testing Requirements
-- [ ] Route-level contract tests for all existing endpoints.
-- [ ] Startup/shutdown integration tests validate worker starts/stops and DB closes.
-- [ ] Regression tests ensure static UI serving still works.
+- [x] Route-level contract tests for all existing endpoints.
+- [x] Startup/shutdown integration tests validate worker starts/stops and DB closes.
+- [x] Regression tests ensure static UI serving still works.
 
 ---
 

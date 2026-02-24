@@ -72,6 +72,7 @@ class InputPathRequest(BaseModel):
 
 class PromptPresetSaveRequest(BaseModel):
     name: str
+    mode: str = "video_gen"
     positive_prompt: str = ""
     negative_prompt: str = ""
 
@@ -412,6 +413,17 @@ def _workflow_supports_resolution(wf: WorkflowDef) -> bool:
     return False
 
 
+def _infer_workflow_category(wf: WorkflowDef) -> str:
+    if wf.category:
+        return str(wf.category).strip().lower()
+    name = str(wf.name or "").lower()
+    if "upscale-images" in name:
+        return "image_upscale"
+    if "upscale" in name:
+        return "video_upscale"
+    return "video_gen"
+
+
 def _resolve_resolution_preset(preset_id: str | None) -> tuple[int, int] | None:
     if preset_id is None:
         return None
@@ -434,6 +446,7 @@ def api_workflows() -> list[dict[str, Any]]:
                 "name": wf.name,
                 "display_name": wf.display_name or wf.name,
                 "group": wf.group or "Workflows",
+                "category": _infer_workflow_category(wf),
                 "description": wf.description,
                 "input_type": wf.input_type,
                 "input_extensions": wf.input_extensions,
@@ -464,14 +477,17 @@ def api_loras() -> list[str]:
 
 
 @app.get("/api/prompt-presets")
-def api_prompt_presets(limit: int = Query(default=200, ge=1, le=1000)) -> dict[str, Any]:
-    return {"items": state.db.list_prompt_presets(limit=limit)}
+def api_prompt_presets(
+    limit: int = Query(default=200, ge=1, le=1000),
+    mode: str | None = Query(default=None),
+) -> dict[str, Any]:
+    return {"items": state.db.list_prompt_presets(limit=limit, mode=mode)}
 
 
 @app.post("/api/prompt-presets", status_code=201)
 def api_save_prompt_preset(req: PromptPresetSaveRequest) -> dict[str, Any]:
     try:
-        item = state.db.save_prompt_preset(req.name, req.positive_prompt, req.negative_prompt)
+        item = state.db.save_prompt_preset(req.name, req.positive_prompt, req.negative_prompt, mode=req.mode)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return item
