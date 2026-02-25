@@ -398,6 +398,25 @@ class QueueDB:
             "running": int(row["running"] or 0),
         }
 
+    def clear_queue(self) -> dict[str, int]:
+        row = self.conn.execute(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM jobs) AS jobs_count,
+              (SELECT COUNT(*) FROM prompts) AS prompts_count
+            """
+        ).fetchone()
+        jobs_count = int(row["jobs_count"] or 0)
+        prompts_count = int(row["prompts_count"] or 0)
+
+        with self.conn:
+            self.conn.execute("DELETE FROM jobs")
+
+        return {
+            "deleted_jobs": jobs_count,
+            "deleted_prompts": prompts_count,
+        }
+
     def touch_input_dir_history(self, path: str) -> None:
         now = utc_now()
         with self.conn:

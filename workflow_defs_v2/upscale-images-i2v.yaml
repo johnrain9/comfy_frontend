@@ -18,12 +18,22 @@ template_inline:
   "3":
     class_type: ImageUpscaleWithModel
     inputs:
-      upscale_model: ["2", 0]
+      upscale_model: ["8", 0]
       image: ["1", 0]
+  "6":
+    class_type: UpscaleModelLoader
+    inputs:
+      model_name: RealESRGAN_x4plus.pth
+  "8":
+    class_type: ComfySwitchNode
+    inputs:
+      switch: false
+      on_false: ["2", 0]
+      on_true: ["6", 0]
   "4":
     class_type: ImageScaleBy
     inputs:
-      image: ["3", 0]
+      image: ["12", 0]
       upscale_method: lanczos
       scale_by: 1.0
   "5":
@@ -31,6 +41,30 @@ template_inline:
     inputs:
       images: ["4", 0]
       filename_prefix: image/upscaled_i2v
+  "9":
+    class_type: Image Median Blur
+    inputs:
+      images: ["3", 0]
+      size: 3
+  "10":
+    class_type: ComfySwitchNode
+    inputs:
+      switch: false
+      on_false: ["3", 0]
+      on_true: ["9", 0]
+  "11":
+    class_type: Image Sharpen FS
+    inputs:
+      images: ["10", 0]
+      method: hard
+      type: median
+      intensity: 3
+  "12":
+    class_type: ComfySwitchNode
+    inputs:
+      switch: false
+      on_false: ["10", 0]
+      on_true: ["11", 0]
 
 file_bindings:
   load_image:
@@ -55,6 +89,46 @@ parameters:
     default: 0.75
     min: 0.25
     max: 2.0
+  recover_enabled:
+    label: "Recover low-quality input (stronger enhancement)"
+    type: bool
+    nodes: ["8"]
+    field: switch
+    default: false
+  recover_model_name:
+    label: "Recover model"
+    type: text
+    nodes: ["6"]
+    field: model_name
+    default: "RealESRGAN_x4plus.pth"
+  recover_denoise_enabled:
+    label: "Denoise (median blur)"
+    type: bool
+    nodes: ["10"]
+    field: switch
+    default: false
+  recover_denoise_size:
+    label: "Denoise size"
+    type: int
+    nodes: ["9"]
+    field: size
+    default: 3
+    min: 1
+    max: 31
+  recover_sharpen_enabled:
+    label: "Sharpen"
+    type: bool
+    nodes: ["12"]
+    field: switch
+    default: false
+  recover_sharpen_intensity:
+    label: "Sharpen intensity"
+    type: int
+    nodes: ["11"]
+    field: intensity
+    default: 3
+    min: 1
+    max: 32
   output_prefix:
     label: "Output prefix"
     type: text

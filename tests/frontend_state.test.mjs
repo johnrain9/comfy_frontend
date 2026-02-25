@@ -56,8 +56,11 @@ function buildApi(options = {}) {
 
   let activeWorkflows = options.workflows || defaultWorkflows;
   const promptPresets = Array.isArray(options.promptPresets) ? [...options.promptPresets] : [];
+  const upscaleModels = Array.isArray(options.upscaleModels)
+    ? options.upscaleModels
+    : ['RealESRGAN_x2plus.pth', 'RealESRGAN_x4plus.pth', 'RealESRNet_x4plus.pth'];
   const workflowsAfterReload = options.workflowsAfterReload || null;
-  const jobsList = options.jobsList || [];
+  let jobsList = options.jobsList || [];
   const jobDetails = options.jobDetails || {};
   const defaultPath = options.defaultPath || '/home/cobra/ComfyUI/input';
   const defaultExists = options.defaultExists !== undefined ? options.defaultExists : true;
@@ -77,6 +80,7 @@ function buildApi(options = {}) {
     state.requests.push({ method, path: p, query: u.search, body: bodyObj });
 
     if (method === 'GET' && p === '/api/loras') return mkResponse(200, []);
+    if (method === 'GET' && p === '/api/upscale-models') return mkResponse(200, upscaleModels);
     if (method === 'GET' && p === '/api/resolution-presets') {
       return mkResponse(200, { presets: [
         { id: '640x1136', label: '640 x 1136', width: 640, height: 1136 },
@@ -134,6 +138,11 @@ function buildApi(options = {}) {
     }
 
     if (method === 'POST' && (p === '/api/queue/pause' || p === '/api/queue/resume')) return mkResponse(200, { ok: true });
+    if (method === 'POST' && p === '/api/queue/clear') {
+      const deletedJobs = jobsList.length;
+      jobsList = [];
+      return mkResponse(200, { ok: true, deleted_jobs: deletedJobs, deleted_prompts: deletedJobs });
+    }
     if (method === 'POST' && p.includes('/cancel')) return mkResponse(200, { cancel_summary: { mode: 'immediate', canceled_pending: 1, running_prompts: 0 } });
     if (method === 'POST' && p.includes('/retry')) return mkResponse(200, { ok: true });
     if (method === 'POST' && p === '/api/reload/workflows') {
@@ -168,6 +177,11 @@ async function createDom(options = {}) {
         window.localStorage.setItem(STATE_KEY, options.seedState);
       }
       window.fetch = (url, opts) => Promise.resolve(fetchRouter(url, opts || {}));
+      const confirmResponses = Array.isArray(options.confirmResponses) ? [...options.confirmResponses] : null;
+      window.confirm = () => {
+        if (confirmResponses && confirmResponses.length > 0) return !!confirmResponses.shift();
+        return true;
+      };
       window.setInterval = () => 0;
       window.clearInterval = () => {};
     },
@@ -262,7 +276,7 @@ test('corrupted localStorage state safely falls back to defaults', async () => {
   const doc = dom.window.document;
 
   assert.equal(doc.getElementById('workflowSelect').options.length > 0, true);
-  assert.equal(doc.getElementById('inputDir').value, '/home/cobra/ComfyUI/input');
+  assert.equal(doc.getElementById('inputDir').value, '');
 
   dom.window.close();
 });
@@ -315,8 +329,8 @@ test('reset button clears saved options', async () => {
   dispatch(doc.getElementById('resetSavedBtn'), 'click');
 
   const state = JSON.parse(dom.window.localStorage.getItem(STATE_KEY));
-  assert.equal(state.global.input_dir, '/home/cobra/ComfyUI/input');
-  assert.equal(doc.getElementById('inputDir').value, '/home/cobra/ComfyUI/input');
+  assert.equal(state.global.input_dir, '');
+  assert.equal(doc.getElementById('inputDir').value, '');
 
   dom.window.close();
 });
@@ -446,9 +460,17 @@ test('upscale images tab selects workflow and submits non-prompt upscale params'
   const { dom, apiState } = await createDom({ workflows: [generic, upscaleImages] });
   const doc = dom.window.document;
 
+  assert.equal(doc.getElementById('upscaleImagesDropZone').classList.contains('hidden'), true);
   dispatch(doc.getElementById('tabUpscaleImages'), 'click');
   assert.equal(doc.getElementById('workflowSelect').value, 'upscale-images-i2v');
   assert.equal(doc.getElementById('promptPresetSection').classList.contains('hidden'), true);
+  assert.equal(doc.getElementById('upscaleImagesDropZone').classList.contains('hidden'), false);
+  assert.equal(doc.getElementById('clearUpscaleDropBtn').classList.contains('hidden'), true);
+  const modelField = doc.querySelector('[data-param-name="upscale_model_name"]');
+  assert.equal(modelField.tagName, 'SELECT');
+  const modelOptions = [...modelField.options].map((o) => o.value);
+  assert.ok(modelOptions.includes('RealESRGAN_x4plus.pth'));
+  assert.ok(modelOptions.includes('RealESRNet_x4plus.pth'));
 
   doc.getElementById('inputDir').value = '/tmp/upscale_images';
   dispatch(doc.getElementById('inputDir'), 'input');
@@ -683,7 +705,7 @@ test('picker start-dir payload uses default when empty and explicit path when pr
   await wait(10);
 
   const pickReq1 = apiState.requests.find((r) => r.path === '/api/pick-directory' && r.method === 'POST');
-  assert.equal(pickReq1.body.start_dir, '/home/cobra/ComfyUI/input');
+  assert.equal(pickReq1.body.start_dir, null);
 
   doc.getElementById('inputDir').value = '/tmp/custom';
   dispatch(doc.getElementById('inputBrowseBtn'), 'click');
@@ -698,7 +720,7 @@ test('picker start-dir payload uses default when empty and explicit path when pr
 test('default input directory warning shown when unavailable', async () => {
   const { dom } = await createDom({ defaultExists: false });
   const txt = dom.window.document.getElementById('defaultInputDirNotice').textContent;
-  assert.match(txt, /unavailable/i);
+  assert.equal(txt, '');
   dom.window.close();
 });
 
@@ -750,6 +772,33 @@ test('prompt details render prompt row id, comfy prompt id, and collapsible JSON
 
   const pre = body.querySelector('pre');
   assert.ok(pre.textContent.includes('"node"'));
+
+  dom.window.close();
+});
+
+test('clear queue button requires two confirmations and clears queue', async () => {
+  const { dom, apiState } = await createDom({
+    confirmResponses: [true, true],
+    jobsList: [
+      {
+        id: 1,
+        workflow_name: 'wan-context-lite-2stage',
+        input_dir: '/tmp/in',
+        status: 'pending',
+        created_at: '2026-01-01T00:00:00+00:00',
+        finished_at: null,
+        prompt_count: 1,
+      },
+    ],
+  });
+  const doc = dom.window.document;
+
+  dispatch(doc.getElementById('clearQueueBtn'), 'click');
+  await wait(10);
+
+  const clearReq = apiState.requests.find((r) => r.method === 'POST' && r.path === '/api/queue/clear');
+  assert.ok(clearReq);
+  assert.match(doc.getElementById('submitMsg').textContent, /queue cleared/i);
 
   dom.window.close();
 });

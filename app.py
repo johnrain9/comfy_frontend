@@ -21,6 +21,7 @@ from worker import Worker
 
 LORA_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+UPSCALE_MODEL_EXTENSIONS = {".pth", ".pt", ".ckpt", ".safetensors", ".bin"}
 WAN_POSITIVE_TEMPLATE = "(at 0 second: )(at 3 second: )(at 7 second: )"
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 RESOLUTION_PRESETS: list[dict[str, Any]] = [
@@ -196,6 +197,31 @@ def _discover_loras() -> list[str]:
             seen.add(name)
             found.append(name)
 
+    return sorted(found, key=str.lower)
+
+
+def _discover_upscale_models() -> list[str]:
+    roots = [
+        state.comfy_root / "models" / "upscale_models",
+        state.comfy_root / "upscale_models",
+    ]
+
+    seen: set[str] = set()
+    found: list[str] = []
+    for root in roots:
+        if not root.exists() or not root.is_dir():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in UPSCALE_MODEL_EXTENSIONS:
+                continue
+            try:
+                name = path.relative_to(root).as_posix()
+            except ValueError:
+                name = path.name
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            found.append(name)
     return sorted(found, key=str.lower)
 
 
@@ -476,6 +502,11 @@ def api_loras() -> list[str]:
     return _discover_loras()
 
 
+@app.get("/api/upscale-models")
+def api_upscale_models() -> list[str]:
+    return _discover_upscale_models()
+
+
 @app.get("/api/prompt-presets")
 def api_prompt_presets(
     limit: int = Query(default=200, ge=1, le=1000),
@@ -520,6 +551,12 @@ def api_reload_workflows() -> dict[str, Any]:
 def api_reload_loras() -> dict[str, Any]:
     loras = _discover_loras()
     return {"count": len(loras), "loras": loras}
+
+
+@app.post("/api/reload/upscale-models")
+def api_reload_upscale_models() -> dict[str, Any]:
+    models = _discover_upscale_models()
+    return {"count": len(models), "models": models}
 
 
 @app.post("/api/input-dirs/normalize")
@@ -578,6 +615,7 @@ def api_pick_image(req: PickImageRequest | None = None) -> dict[str, str]:
 async def api_upload_input_image(
     request: Request,
     x_filename: str | None = Header(default=None),
+    x_subdir: str | None = Header(default=None),
 ) -> dict[str, str]:
     raw_name = Path(x_filename or "upload.png").name
     suffix = Path(raw_name).suffix.lower()
@@ -589,15 +627,25 @@ async def api_upload_input_image(
 
     safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(raw_name).stem).strip("._") or "upload"
     unique = f"{int(time.time() * 1000)}_{safe_stem}{suffix}"
-    state.comfy_input_dir.mkdir(parents=True, exist_ok=True)
-    dest = (state.comfy_input_dir / unique).resolve()
+    subdir = str(x_subdir or "").strip().replace("\\", "/")
+    if subdir:
+        subdir = re.sub(r"[^A-Za-z0-9_./-]+", "_", subdir).strip("/")
+    base_dir = state.comfy_input_dir
+    if subdir:
+        base_dir = (state.comfy_input_dir / subdir).resolve()
+        try:
+            base_dir.relative_to(state.comfy_input_dir.resolve())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid upload subdir") from exc
+    base_dir.mkdir(parents=True, exist_ok=True)
+    dest = (base_dir / unique).resolve()
 
     data = await request.body()
     if not data:
         raise HTTPException(status_code=400, detail="uploaded file is empty")
     dest.write_bytes(data)
 
-    return {"path": str(dest)}
+    return {"path": str(dest), "dir": str(base_dir)}
 
 
 def _list_inputs(input_dir: Path, exts: list[str]) -> list[Path]:
@@ -778,6 +826,15 @@ def queue_pause() -> dict[str, Any]:
 def queue_resume() -> dict[str, Any]:
     state.db.resume()
     return {"worker": "running"}
+
+
+@app.post("/api/queue/clear")
+def queue_clear() -> dict[str, Any]:
+    summary = state.db.clear_queue()
+    return {
+        "ok": True,
+        **summary,
+    }
 
 
 @app.get("/api/health")

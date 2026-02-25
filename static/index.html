@@ -137,6 +137,11 @@
             <input id="inputDir" list="inputDirHistory" placeholder="/home/cobra/ComfyUI/input/my_batch" />
             <button id="inputBrowseBtn" type="button" class="btn browse-btn">Browse...</button>
           </div>
+          <div id="upscaleImagesDropZone" class="drop-zone hidden">Drop one or more images here for Upscale Images mode</div>
+          <div class="inline" id="upscaleImagesActions" style="margin-top:6px;">
+            <button id="clearUpscaleDropBtn" type="button" class="btn hidden" style="width:auto;">Clear dropped images</button>
+          </div>
+          <div id="upscaleImagesThumbs" class="row-2 hidden"></div>
           <datalist id="inputDirHistory"></datalist>
           <div class="hint">Accepts Linux absolute paths and pasted Windows/\\wsl.localhost paths.</div>
           <div id="defaultInputDirNotice" class="hint"></div>
@@ -178,7 +183,10 @@
     </div>
 
     <div class="panel">
-      <h3>Queue</h3>
+      <div class="inline" style="justify-content: space-between; align-items: center;">
+        <h3 style="margin:0;">Queue</h3>
+        <button id="clearQueueBtn" type="button" class="btn" style="width:auto;">Clear Queue</button>
+      </div>
       <table class="table" id="jobsTable">
         <thead>
           <tr>
@@ -194,6 +202,7 @@
 let workflows = [];
 let workflowMap = {};
 let loraChoices = [];
+let upscaleModelChoices = [];
 let resolutionPresets = [];
 let recentInputDirs = [];
 let promptPresets = [];
@@ -204,12 +213,34 @@ let refreshJobsBusy = false;
 let refreshHealthBusy = false;
 let currentWorkflowName = '';
 let activeTab = 'batch';
-let defaultBatchInputDir = '/home/cobra/ComfyUI/input';
+let defaultBatchInputDir = '';
 let defaultBatchInputExists = true;
+let droppedUpscaleInputDir = '';
+let droppedUpscaleUploading = false;
+
+function applyUpscaleDroppedStateUI() {
+  const input = document.getElementById('inputDir');
+  const browse = document.getElementById('inputBrowseBtn');
+  const usingDropped = activeTab === 'upscale_images' && !!droppedUpscaleInputDir;
+  if (input) {
+    input.disabled = usingDropped;
+    if (usingDropped) {
+      input.placeholder = 'Using dropped images batch (input dir ignored)';
+      if (!input.value) input.value = '(using dropped images batch)';
+    } else {
+      if (input.value === '(using dropped images batch)') input.value = '';
+      input.placeholder = '/home/cobra/ComfyUI/input/my_batch';
+    }
+  }
+  if (browse) {
+    browse.disabled = usingDropped;
+  }
+}
 
 const WAN_POSITIVE_TEMPLATE = '(at 0 second: )(at 3 second: )(at 7 second: )';
 const UI_STATE_KEY = 'video_queue_ui_state_v1';
 const UI_STATE_VERSION = 1;
+const LEGACY_DEFAULT_INPUT_DIR = '/home/cobra/ComfyUI/input';
 
 function defaultUiState() {
   return {
@@ -299,6 +330,9 @@ function loadUiState() {
         next.global.flip_orientation = !!parsed.global.flip_orientation;
         next.global.move_processed = !!parsed.global.move_processed;
         next.global.input_dir = typeof parsed.global.input_dir === 'string' ? parsed.global.input_dir : '';
+        if (next.global.input_dir.trim() === LEGACY_DEFAULT_INPUT_DIR) {
+          next.global.input_dir = '';
+        }
         next.global.single_image = typeof parsed.global.single_image === 'string' ? parsed.global.single_image : '';
         next.global.job_name = typeof parsed.global.job_name === 'string' ? parsed.global.job_name : '';
         next.global.active_tab = (parsed.global.active_tab === 'single' || parsed.global.active_tab === 'upscale' || parsed.global.active_tab === 'upscale_images')
@@ -505,6 +539,27 @@ function buildLoraSelect(defaultValue) {
   return sel;
 }
 
+function buildChoicesSelect(defaultValue, choices, emptyLabel='(empty)') {
+  const sel = document.createElement('select');
+  const unique = [];
+  const seen = new Set();
+  const values = [''].concat(defaultValue || '').concat(choices || []);
+  for (const value of values) {
+    const name = String(value || '');
+    if (seen.has(name)) continue;
+    seen.add(name);
+    unique.push(name);
+  }
+  for (const name of unique) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name || emptyLabel;
+    sel.appendChild(opt);
+  }
+  sel.value = String(defaultValue || '');
+  return sel;
+}
+
 function renderResolutionPresets() {
   const sel = document.getElementById('resolutionPreset');
   const existing = sel.value;
@@ -657,6 +712,8 @@ function setActiveTab(tabName, persist=true) {
 
   document.getElementById('batchInputSection').classList.toggle('hidden', isSingle);
   document.getElementById('singleInputSection').classList.toggle('hidden', !isSingle);
+  document.getElementById('upscaleImagesDropZone').classList.toggle('hidden', !isUpscaleImages);
+  document.getElementById('upscaleImagesThumbs').classList.toggle('hidden', !isUpscaleImages);
   document.getElementById('tabBatch').classList.toggle('active', activeTab === 'batch');
   document.getElementById('tabSingle').classList.toggle('active', isSingle);
   document.getElementById('tabUpscale').classList.toggle('active', isUpscale);
@@ -673,6 +730,7 @@ function setActiveTab(tabName, persist=true) {
     uiState.global.active_tab = activeTab;
     saveUiState();
   }
+  applyUpscaleDroppedStateUI();
 }
 
 function readParamsFromForm() {
@@ -839,6 +897,9 @@ function renderParamFields() {
     } else if (p.type === 'text' && /lora/i.test(name)) {
       el = buildLoraSelect(fieldValue);
       wrap.appendChild(el);
+    } else if (p.type === 'text' && /upscale.*model|model.*upscale/.test(name)) {
+      el = buildChoicesSelect(fieldValue, upscaleModelChoices, '(select model)');
+      wrap.appendChild(el);
     } else if (p.type === 'text' && /prompt/i.test(name)) {
       el = document.createElement('textarea');
       el.value = fieldValue ?? '';
@@ -904,9 +965,25 @@ function renderParamFields() {
   }
 
   const stageContainers = {};
+  const recoverContainer = (() => {
+    const details = document.createElement('details');
+    details.open = false;
+    const summary = document.createElement('summary');
+    summary.textContent = 'Recover (low-quality inputs)';
+    details.appendChild(summary);
+    const body = document.createElement('div');
+    body.className = 'row-2';
+    details.appendChild(body);
+    return { details, body, used: false };
+  })();
 
   for (const [name, p] of Object.entries(wf.parameters || {})) {
     const wrap = makeParamWrap(name, p);
+    if (name.startsWith('recover_')) {
+      recoverContainer.used = true;
+      recoverContainer.body.appendChild(wrap);
+      continue;
+    }
     const idx = extraGroupIndex(name);
     if (idx > 0) {
       extraContainers[idx].used = true;
@@ -944,6 +1021,13 @@ function renderParamFields() {
     if (extraContainers[idx].used) {
       box.appendChild(extraContainers[idx].details);
     }
+  }
+  if (recoverContainer.used) {
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = 'Disabled by default. Enable only for low-quality inputs that need stronger enhancement.';
+    recoverContainer.body.appendChild(hint);
+    box.appendChild(recoverContainer.details);
   }
 
   saveCurrentWorkflowParams();
@@ -1002,6 +1086,17 @@ async function loadLoras() {
     loraChoices = Array.isArray(data) ? data : [];
   } catch {
     loraChoices = [];
+  }
+}
+
+async function loadUpscaleModels() {
+  const common = ['RealESRGAN_x2plus.pth', 'RealESRGAN_x4plus.pth', 'RealESRNet_x4plus.pth'];
+  try {
+    const data = await jfetch('/api/upscale-models');
+    const found = Array.isArray(data) ? data : [];
+    upscaleModelChoices = [...new Set([...found, ...common])];
+  } catch {
+    upscaleModelChoices = [...common];
   }
 }
 
@@ -1218,19 +1313,8 @@ async function savePromptPresetFromUI() {
 async function loadDefaultInputDir() {
   const notice = document.getElementById('defaultInputDirNotice');
   notice.textContent = '';
-  try {
-    const data = await jfetch('/api/input-dirs/default');
-    const candidate = String(data.default_path || '').trim();
-    defaultBatchInputDir = candidate || defaultBatchInputDir;
-    defaultBatchInputExists = !!data.exists;
-  } catch {
-    defaultBatchInputDir = '/home/cobra/ComfyUI/input';
-    defaultBatchInputExists = true;
-  }
-
-  if (!defaultBatchInputExists) {
-    notice.textContent = `Default input directory is unavailable: ${defaultBatchInputDir}. Enter another directory or use Browse.`;
-  }
+  defaultBatchInputDir = '';
+  defaultBatchInputExists = true;
 }
 
 async function loadWorkflows(preferredName) {
@@ -1326,11 +1410,21 @@ async function submitJob() {
     endpoint = '/api/jobs/single';
     pathPayload = { input_image };
   } else {
-    let input_dir;
-    try {
-      input_dir = await normalizeInputDirField();
-    } catch {
+    let input_dir = '';
+    if (activeTab === 'upscale_images' && droppedUpscaleUploading) {
+      msg.textContent = 'Upload in progress. Wait for dropped images to finish uploading.';
       return;
+    }
+    if (activeTab === 'upscale_images' && droppedUpscaleInputDir) {
+      input_dir = droppedUpscaleInputDir;
+      document.getElementById('inputDir').value = droppedUpscaleInputDir;
+      syncGlobalStateFromForm();
+    } else {
+      try {
+        input_dir = await normalizeInputDirField();
+      } catch {
+        return;
+      }
     }
     pathPayload = { input_dir };
   }
@@ -1375,7 +1469,7 @@ async function browseInputDir() {
   btn.disabled = true;
   btn.textContent = 'Picking...';
   try {
-    const current = input.value.trim() || defaultBatchInputDir;
+    const current = input.value.trim();
     const data = await jfetch('/api/pick-directory', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -1422,14 +1516,16 @@ async function browseInputImage() {
   }
 }
 
-async function uploadDroppedImage(fileObj) {
+async function uploadDroppedImage(fileObj, subdir='') {
   const filename = (fileObj && fileObj.name) ? String(fileObj.name) : 'upload.png';
+  const headers = {
+    'Content-Type': (fileObj && fileObj.type) ? fileObj.type : 'application/octet-stream',
+    'X-Filename': filename
+  };
+  if (subdir) headers['X-Subdir'] = String(subdir);
   return jfetch('/api/upload/input-image', {
     method: 'POST',
-    headers: {
-      'Content-Type': (fileObj && fileObj.type) ? fileObj.type : 'application/octet-stream',
-      'X-Filename': filename
-    },
+    headers,
     body: fileObj
   });
 }
@@ -1488,6 +1584,150 @@ function setupSingleDropZone() {
   });
 }
 
+function setupUpscaleImagesDropZone() {
+  const zone = document.getElementById('upscaleImagesDropZone');
+  const input = document.getElementById('inputDir');
+  const thumbs = document.getElementById('upscaleImagesThumbs');
+  const clearBtn = document.getElementById('clearUpscaleDropBtn');
+  const msg = document.getElementById('submitMsg');
+  if (!zone || !input) return;
+
+  function setClearVisible(visible) {
+    if (!clearBtn) return;
+    clearBtn.classList.toggle('hidden', !visible);
+  }
+
+  function clearDroppedUpscaleState(showMessage = false) {
+    droppedUpscaleInputDir = '';
+    if (thumbs) {
+      thumbs.innerHTML = '';
+      thumbs.classList.add('hidden');
+    }
+    setClearVisible(false);
+    applyUpscaleDroppedStateUI();
+    if (showMessage) {
+      msg.textContent = 'Cleared dropped images for Upscale Images mode.';
+    }
+  }
+
+  const activate = () => zone.classList.add('active');
+  const deactivate = () => zone.classList.remove('active');
+
+  function renderThumbs(files) {
+    if (!thumbs) return;
+    thumbs.innerHTML = '';
+    const list = Array.from(files || []).slice(0, 8);
+    if (list.length === 0) {
+      thumbs.classList.add('hidden');
+      setClearVisible(false);
+      return;
+    }
+    for (const f of list) {
+      const card = document.createElement('div');
+      card.style.display = 'flex';
+      card.style.gap = '8px';
+      card.style.alignItems = 'center';
+      card.style.padding = '6px';
+      card.style.border = '1px solid var(--line)';
+      card.style.borderRadius = '8px';
+      card.style.background = '#0f141b';
+      const img = document.createElement('img');
+      img.style.width = '44px';
+      img.style.height = '44px';
+      img.style.objectFit = 'cover';
+      img.style.borderRadius = '6px';
+      img.alt = String((f && f.name) || 'image');
+      try {
+        img.src = URL.createObjectURL(f);
+      } catch {
+        img.src = '';
+      }
+      const label = document.createElement('div');
+      label.className = 'hint';
+      label.textContent = String((f && f.name) || 'image');
+      card.appendChild(img);
+      card.appendChild(label);
+      thumbs.appendChild(card);
+    }
+    thumbs.classList.remove('hidden');
+    setClearVisible(true);
+  }
+
+  zone.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    activate();
+  });
+  zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    activate();
+  });
+  zone.addEventListener('dragleave', () => {
+    deactivate();
+  });
+  zone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    deactivate();
+    const dt = e.dataTransfer;
+    const files = dt && dt.files ? dt.files : null;
+    if (!files || files.length === 0) {
+      msg.textContent = 'Drop image files to upload for Upscale Images mode.';
+      return;
+    }
+
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.bmp'];
+    const valid = [];
+    for (let i = 0; i < files.length; i += 1) {
+      const f = files[i];
+      const name = String((f && f.name) || '').toLowerCase();
+      if (allowed.some(ext => name.endsWith(ext))) valid.push(f);
+    }
+    if (valid.length === 0) {
+      msg.textContent = 'No supported image files found in drop.';
+      return;
+    }
+    renderThumbs(valid);
+
+    const dropToken = `uploads/upscale_images/${Date.now()}`;
+    droppedUpscaleUploading = true;
+    msg.textContent = `Uploading ${valid.length} image(s)...`;
+    try {
+      const uploaded = [];
+      for (const fileObj of valid) {
+        const data = await uploadDroppedImage(fileObj, dropToken);
+        uploaded.push(data);
+      }
+      const dir = String((uploaded[0] && uploaded[0].dir) || '');
+      if (!dir) {
+        msg.textContent = 'Upload succeeded but could not resolve input directory.';
+        return;
+      }
+      droppedUpscaleInputDir = dir;
+      input.value = '';
+      applyUpscaleDroppedStateUI();
+      syncGlobalStateFromForm();
+      msg.textContent = `Uploaded ${uploaded.length} image(s) for Upscale Images mode.`;
+    } catch (err) {
+      msg.textContent = `Upscale drop upload error: ${err.message}`;
+      droppedUpscaleInputDir = '';
+      applyUpscaleDroppedStateUI();
+      setClearVisible(false);
+    } finally {
+      droppedUpscaleUploading = false;
+    }
+  });
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      clearDroppedUpscaleState(true);
+      if (activeTab === 'upscale_images') {
+        input.value = '';
+        applyUpscaleDroppedStateUI();
+        syncGlobalStateFromForm();
+      }
+    });
+  }
+}
+
 function statusBadge(status) {
   return `<span class="badge s-${status}">${status}</span>`;
 }
@@ -1527,6 +1767,34 @@ async function jobAction(jobId, action, triggerBtn) {
       btn.disabled = false;
       btn.textContent = original;
     }
+  }
+}
+
+async function clearQueueFromUI() {
+  const msg = document.getElementById('submitMsg');
+  const btn = document.getElementById('clearQueueBtn');
+  const c1 = window.confirm('Clear entire queue and delete all jobs/prompts?');
+  if (!c1) return;
+  const c2 = window.confirm('Final confirmation: this will permanently delete the entire queue history. Continue?');
+  if (!c2) return;
+
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Clearing...';
+  try {
+    const out = await jfetch('/api/queue/clear', { method: 'POST' });
+    const dj = Number(out.deleted_jobs || 0);
+    const dp = Number(out.deleted_prompts || 0);
+    msg.textContent = `Queue cleared. Deleted jobs=${dj}, prompts=${dp}.`;
+    lastJobsSig = '';
+    lastHealthSig = '';
+    await refreshJobs();
+    await refreshHealth();
+  } catch (e) {
+    msg.textContent = `Clear queue error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
   }
 }
 
@@ -1726,7 +1994,14 @@ document.getElementById('tabUpscaleImages').addEventListener('click', () => {
   setActiveTab('upscale_images');
   syncGlobalStateFromForm();
 });
-document.getElementById('inputDir').addEventListener('input', syncGlobalStateFromForm);
+document.getElementById('inputDir').addEventListener('input', () => {
+  const v = document.getElementById('inputDir').value.trim();
+  if (activeTab === 'upscale_images' && droppedUpscaleInputDir && v !== droppedUpscaleInputDir) {
+    droppedUpscaleInputDir = '';
+    applyUpscaleDroppedStateUI();
+  }
+  syncGlobalStateFromForm();
+});
 document.getElementById('inputDir').addEventListener('blur', () => { normalizeInputDirField().catch(() => {}); });
 document.getElementById('inputImage').addEventListener('input', syncGlobalStateFromForm);
 document.getElementById('inputImage').addEventListener('blur', () => { normalizeInputImageField().catch(() => {}); });
@@ -1742,10 +2017,12 @@ document.getElementById('pauseBtn').addEventListener('click', () => jfetch('/api
 document.getElementById('resumeBtn').addEventListener('click', () => jfetch('/api/queue/resume', {method:'POST'}).then(() => { lastHealthSig = ''; return refreshHealth(); }));
 document.getElementById('reloadWorkflowsBtn').addEventListener('click', reloadWorkflowsFromUI);
 document.getElementById('reloadLorasBtn').addEventListener('click', reloadLorasFromUI);
+document.getElementById('clearQueueBtn').addEventListener('click', clearQueueFromUI);
 
 (async function init() {
   loadUiState();
   await loadLoras();
+  await loadUpscaleModels();
   await loadResolutionPresets();
   await loadRecentInputDirs();
   await loadPromptPresets();
@@ -1753,6 +2030,8 @@ document.getElementById('reloadLorasBtn').addEventListener('click', reloadLorasF
   await loadDefaultInputDir();
   await loadWorkflows();
   setupSingleDropZone();
+  setupUpscaleImagesDropZone();
+  applyUpscaleDroppedStateUI();
   await refreshHealth();
   await refreshJobs();
   setInterval(refreshHealth, 5000);

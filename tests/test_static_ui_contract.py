@@ -27,6 +27,5 @@ def test_ui_contains_cancel_feedback_and_prompt_details():
     assert "Prompt JSON" in HTML
 
 
-def test_ui_uses_default_input_dir_endpoint():
-    assert "/api/input-dirs/default" in HTML
+def test_ui_contains_default_input_dir_notice_anchor():
     assert "defaultInputDirNotice" in HTML
