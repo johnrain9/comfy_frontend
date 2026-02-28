@@ -85,6 +85,21 @@ export interface SettingsPreset {
   updated_at: string;
 }
 
+export interface AutoPromptItem {
+  path: string;
+  caption?: string;
+  motion_prompt?: string;
+  motion_prompts?: Record<string, string>;
+}
+
+export interface AutoPromptResponse {
+  items: AutoPromptItem[];
+  stage1_model: string;
+  stage2_model: string;
+  elapsed_seconds: number;
+  workflow_context: Record<string, unknown>;
+}
+
 export interface InputDirDefaultResponse {
   default_path: string;
   exists: boolean;

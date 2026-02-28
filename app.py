@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from auto_prompt import AutoPromptGenerator, LMStudioUnavailable
 from comfy_client import health_check
 from db import QueueDB
 from defs import ParameterDef, WorkflowDef, WorkflowDefError, load_all
@@ -41,7 +42,10 @@ class JobCreateRequest(BaseModel):
     workflow_name: str
     job_name: str | None = None
     input_dir: str = ""
+    prompt_mode: str = "manual"
     params: dict[str, Any] = Field(default_factory=dict)
+    per_file_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    auto_prompt_meta: dict[str, Any] = Field(default_factory=dict)
     resolution_preset: str | None = None
     flip_orientation: bool = False
     move_processed: bool = False
@@ -84,6 +88,15 @@ class SettingsPresetSaveRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class AutoPromptRequest(BaseModel):
+    image_paths: list[str] = Field(default_factory=list)
+    workflow_name: str
+    stage: str = "both"
+    captions: dict[str, str] = Field(default_factory=dict)
+    system_prompt_override: str | None = None
+    lmstudio_url: str | None = None
+
+
 class AppState:
     def __init__(self) -> None:
         self.root = Path(os.environ.get("VIDEO_QUEUE_ROOT", str(Path.home() / "video_queue"))).expanduser().resolve()
@@ -94,6 +107,7 @@ class AppState:
         self.comfy_root = Path(os.environ.get("COMFY_ROOT", str(Path.home() / "ComfyUI"))).expanduser().resolve()
         self.comfy_input_dir = self.comfy_root / "input"
         self.comfy_base_url = os.environ.get("COMFY_BASE_URL", "http://127.0.0.1:8188")
+        self.lmstudio_url = os.environ.get("LMSTUDIO_URL", "http://127.0.0.1:1234")
         self.db = QueueDB(self.data_dir / "queue.db")
         self.workflows: dict[str, WorkflowDef] = {}
         self.worker: Worker | None = None
@@ -586,6 +600,77 @@ def api_reload_upscale_models() -> dict[str, Any]:
     return {"count": len(models), "models": models}
 
 
+@app.get("/api/auto-prompt/capability")
+def api_auto_prompt_capability(lmstudio_url: str | None = Query(default=None)) -> dict[str, Any]:
+    gen = _auto_prompt_generator(lmstudio_url=lmstudio_url)
+    try:
+        gen.check_available()
+        gen.ensure_required_models_loaded(stage="both")
+    except LMStudioUnavailable as exc:
+        return {
+            "available": False,
+            "message": str(exc),
+            "lmstudio_url": gen.lmstudio_url,
+            "stage1_model": gen.stage1_model,
+            "stage2_model": gen.stage2_model,
+        }
+    return {
+        "available": True,
+        "message": "ok",
+        "lmstudio_url": gen.lmstudio_url,
+        "stage1_model": gen.stage1_model,
+        "stage2_model": gen.stage2_model,
+    }
+
+
+@app.post("/api/auto-prompt")
+def api_auto_prompt(req: AutoPromptRequest) -> dict[str, Any]:
+    stage = str(req.stage or "both").strip().lower()
+    if stage not in {"caption", "motion", "both"}:
+        raise HTTPException(status_code=400, detail="stage must be one of: caption, motion, both")
+
+    wf = state.workflows.get(req.workflow_name)
+    if not wf:
+        raise HTTPException(status_code=400, detail=f"unknown workflow: {req.workflow_name}")
+
+    image_paths: list[str] = []
+    for raw in req.image_paths:
+        normalized = _normalize_input_dir(raw, field_label="image path")
+        p = Path(normalized).expanduser().resolve()
+        if not p.exists() or not p.is_file():
+            raise HTTPException(status_code=400, detail=f"image file not found: {p}")
+        image_paths.append(str(p))
+
+    if stage in {"caption", "both"} and not image_paths:
+        raise HTTPException(status_code=400, detail="image_paths is required for caption/both stage")
+    if stage == "motion" and not req.captions:
+        raise HTTPException(status_code=400, detail="captions is required for motion stage")
+    if stage == "motion" and not image_paths and req.captions:
+        image_paths = sorted({str(Path(k).expanduser().resolve()) for k in req.captions.keys()})
+
+    gen = _auto_prompt_generator(lmstudio_url=req.lmstudio_url)
+    try:
+        gen.check_available()
+        gen.ensure_required_models_loaded(stage=stage)
+    except LMStudioUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    ctx = gen.extract_workflow_context(wf)
+    try:
+        result = gen.generate_batch(
+            image_paths=image_paths,
+            workflow_context=ctx,
+            stage=stage,
+            captions=req.captions,
+            system_prompt_override=req.system_prompt_override,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"auto-prompt generation failed: {exc}") from exc
+    return result
+
+
 @app.post("/api/input-dirs/normalize")
 def api_normalize_input_dir(req: InputPathRequest) -> dict[str, str]:
     try:
@@ -743,10 +828,53 @@ def _ensure_worker_running() -> None:
     state.worker.start()
 
 
+def _resolve_per_file_overrides_for_staged(
+    source_files: list[Path],
+    staged_files: list[Path],
+    per_file_params: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    raw = per_file_params or {}
+    if not raw:
+        return {}
+
+    out: dict[str, dict[str, Any]] = {}
+    for src, staged in zip(source_files, staged_files):
+        src_abs = str(src.expanduser().resolve())
+        src_name = src.name
+        override = raw.get(src_abs)
+        if override is None:
+            override = raw.get(src_name)
+        if override is None:
+            continue
+        if not isinstance(override, dict):
+            raise ValueError(f"per_file_params[{src_name}] must be an object")
+        out[str(staged.expanduser().resolve())] = dict(override)
+    return out
+
+
+def _auto_prompt_generator(lmstudio_url: str | None = None) -> AutoPromptGenerator:
+    return AutoPromptGenerator(lmstudio_url=lmstudio_url or state.lmstudio_url)
+
+
+def _validate_prompt_mode(
+    *,
+    prompt_mode: str,
+    per_file_params: dict[str, dict[str, Any]] | None,
+) -> str:
+    mode = str(prompt_mode or "manual").strip().lower()
+    valid = {"manual", "per-image manual", "per-image auto"}
+    if mode not in valid:
+        raise ValueError("prompt_mode must be one of: manual, per-image manual, per-image auto")
+    if mode in {"per-image manual", "per-image auto"} and not (per_file_params or {}):
+        raise ValueError("per_file_params is required for prompt_mode per-image manual/auto")
+    return mode
+
+
 def _enqueue_job_from_files(
     wf: WorkflowDef,
     files: list[Path],
     params: dict[str, Any],
+    per_file_params: dict[str, dict[str, Any]] | None,
     resolution_preset: str | None,
     flip_orientation: bool,
     priority: int,
@@ -763,10 +891,12 @@ def _enqueue_job_from_files(
             staged_files, source_by_staged = _stage_input_files(source_files)
         else:
             staged_files, source_by_staged = [], {}
+        staged_per_file_params = _resolve_per_file_overrides_for_staged(source_files, staged_files, per_file_params)
         staged_specs = build_prompts(
             wf,
             staged_files,
             resolved,
+            per_file_params=staged_per_file_params,
             comfy_input_dir=state.comfy_input_dir,
             resolution=resolution,
             flip_orientation=bool(flip_orientation),
@@ -804,6 +934,10 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
     wf = state.workflows.get(req.workflow_name)
     if not wf:
         raise HTTPException(status_code=400, detail=f"unknown workflow: {req.workflow_name}")
+    try:
+        _validate_prompt_mode(prompt_mode=req.prompt_mode, per_file_params=req.per_file_params)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     files: list[Path] = []
     if wf.input_type in {"image", "video"}:
@@ -830,6 +964,7 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
                     wf=wf,
                     files=[src],
                     params=req.params,
+                    per_file_params=req.per_file_params,
                     resolution_preset=req.resolution_preset,
                     flip_orientation=bool(req.flip_orientation),
                     priority=req.priority,
@@ -849,6 +984,7 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
         wf=wf,
         files=files,
         params=req.params,
+        per_file_params=req.per_file_params,
         resolution_preset=req.resolution_preset,
         flip_orientation=bool(req.flip_orientation),
         priority=req.priority,
@@ -882,6 +1018,7 @@ def create_single_job(req: SingleJobCreateRequest) -> dict[str, Any]:
         wf=wf,
         files=[image_path],
         params=req.params,
+        per_file_params={},
         resolution_preset=req.resolution_preset,
         flip_orientation=bool(req.flip_orientation),
         priority=req.priority,

@@ -11,8 +11,11 @@ export interface WorkspaceState {
   input_dir: string;
   job_name: string;
   image_gen_source_mode: 't2i' | 'i2i';
+  prompt_mode: 'manual' | 'per-image manual' | 'per-image auto';
   params_by_workflow: Record<string, Record<string, unknown>>;
+  per_file_params: Record<string, Record<string, unknown>>;
   dropped_input_dir: string;
+  dropped_input_paths: string[];
   prompt_preset_name: string;
   settings_preset_name: string;
 }
@@ -36,8 +39,11 @@ function mkWorkspace(n: number): WorkspaceState {
     input_dir: '',
     job_name: '',
     image_gen_source_mode: 't2i',
+    prompt_mode: 'manual',
     params_by_workflow: {},
+    per_file_params: {},
     dropped_input_dir: '',
+    dropped_input_paths: [],
     prompt_preset_name: '',
     settings_preset_name: '',
   };
@@ -59,10 +65,21 @@ function normalizeWorkspace(raw: Partial<WorkspaceState> | null | undefined, n: 
         ? src.active_tab
         : base.active_tab,
     image_gen_source_mode: src.image_gen_source_mode === 'i2i' ? 'i2i' : 't2i',
+    prompt_mode:
+      src.prompt_mode === 'per-image manual' || src.prompt_mode === 'per-image auto'
+        ? src.prompt_mode
+        : 'manual',
     params_by_workflow:
       src.params_by_workflow && typeof src.params_by_workflow === 'object'
         ? src.params_by_workflow
         : base.params_by_workflow,
+    per_file_params:
+      src.per_file_params && typeof src.per_file_params === 'object'
+        ? src.per_file_params
+        : base.per_file_params,
+    dropped_input_paths: Array.isArray(src.dropped_input_paths)
+      ? src.dropped_input_paths.map((v) => String(v))
+      : base.dropped_input_paths,
     prompt_preset_name: typeof src.prompt_preset_name === 'string' ? src.prompt_preset_name : base.prompt_preset_name,
     settings_preset_name:
       typeof src.settings_preset_name === 'string' ? src.settings_preset_name : base.settings_preset_name,

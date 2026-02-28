@@ -59,10 +59,18 @@ parameters:
     nodes: ["202"]
     field: lora_name
     default: "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors"
-  extra_lora_strength:
-    label: "Extra LoRA strength"
+  extra_lora_strength_high:
+    label: "Extra LoRA strength (high-noise)"
     type: float
-    nodes: ["201", "202"]
+    nodes: ["201"]
+    field: strength_model
+    default: 0.0
+    min: 0.0
+    max: 2.0
+  extra_lora_strength_low:
+    label: "Extra LoRA strength (low-noise)"
+    type: float
+    nodes: ["202"]
     field: strength_model
     default: 0.0
     min: 0.0

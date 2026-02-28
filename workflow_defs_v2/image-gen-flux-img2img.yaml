@@ -1,0 +1,82 @@
+name: image-gen-flux-img2img
+display_name: "FLUX Img2Img (FluxedUp GGUF)"
+group: "Image Gen"
+category: "image_gen"
+description: "Image-to-image FLUX workflow using flux_img2img_fluxedup_gguf_clean template"
+template: /home/cobra/video_queue/workflow_defs_v2/templates/flux_img2img_fluxedup_gguf_clean.api.json
+input_type: image
+input_extensions: [.png, .jpg, .jpeg, .webp, .bmp]
+
+file_bindings:
+  load_image:
+    nodes: ["26"]
+    field: image
+  output_prefix:
+    nodes: ["9"]
+    field: filename_prefix
+  seed:
+    nodes: ["25"]
+    field: noise_seed
+
+parameters:
+  positive_prompt:
+    label: "Positive prompt"
+    type: text
+    nodes: ["36"]
+    field: clip_l
+    default: ""
+  style_prompt:
+    label: "Style / details prompt"
+    type: text
+    nodes: ["36"]
+    field: t5xxl
+    default: ""
+  guidance:
+    label: "Guidance"
+    type: float
+    nodes: ["36"]
+    field: guidance
+    default: 3.5
+    min: 0.0
+    max: 20.0
+  denoise:
+    label: "Denoise"
+    type: float
+    nodes: ["17"]
+    field: denoise
+    default: 0.5
+    min: 0.0
+    max: 1.0
+  steps:
+    label: "Steps"
+    type: int
+    nodes: ["17"]
+    field: steps
+    default: 25
+    min: 1
+    max: 100
+  scale_by:
+    label: "Pre-encode scale"
+    type: float
+    nodes: ["35"]
+    field: scale_by
+    default: 0.75
+    min: 0.25
+    max: 4.0
+  randomize_seed:
+    label: "Randomize seed"
+    type: bool
+    default: true
+  tries:
+    label: "Tries per image"
+    type: int
+    default: 1
+    min: 1
+    max: 10
+  output_prefix:
+    label: "Output prefix"
+    type: text
+    default: "image/flux_img2img"
+
+switch_states: {}
+move_processed: false

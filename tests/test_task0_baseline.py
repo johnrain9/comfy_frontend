@@ -100,7 +100,7 @@ def test_api_workflows_payload_schema_snapshot(queue_server):
         assert isinstance(workflow.get("display_name"), str)
         assert isinstance(workflow.get("group"), str)
         assert isinstance(workflow.get("description"), str)
-        assert workflow.get("input_type") in {"image", "video"}
+        assert workflow.get("input_type") in {"image", "video", "none"}
         assert isinstance(workflow.get("input_extensions"), list)
         assert isinstance(workflow.get("supports_resolution"), bool)
         parameters = workflow.get("parameters")

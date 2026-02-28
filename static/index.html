@@ -4,41 +4,145 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Comfy Queue</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="shortcut icon" href="/static/favicon.svg" />
   <style>
     :root {
-      --bg: #111418;
-      --panel: #1a1f26;
-      --line: #2c3440;
-      --text: #d7dde7;
-      --muted: #8f9aac;
+      --bg: #090d14;
+      --bg-2: #0f1622;
+      --panel: #131d2d;
+      --panel-2: #0f1725;
+      --line: #25374f;
+      --line-strong: #345070;
+      --text: #d7e3f6;
+      --muted: #90a3bf;
+      --accent: #7fb7ff;
+      --accent-2: #56d8ff;
       --ok: #2ecc71;
       --bad: #ff5b5b;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: "Segoe UI", sans-serif; background: linear-gradient(160deg, #12151b, #0e1116 60%); color: var(--text); }
-    .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
-    .bar, .panel { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1100px 460px at 8% -4%, #163154 0%, transparent 62%),
+        radial-gradient(900px 420px at 110% 0%, #1a2e49 0%, transparent 60%),
+        linear-gradient(165deg, var(--bg-2), var(--bg));
+      color: var(--text);
+      line-height: 1.35;
+    }
+    .wrap { max-width: 1380px; margin: 0 auto; padding: 16px 20px 24px; }
+    .page-hero {
+      margin: 2px 0 12px;
+      padding: 10px 2px 4px;
+    }
+    .page-hero .title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: #e7f0ff;
+      margin: 0;
+    }
+    .page-hero .sub {
+      margin-top: 4px;
+      color: #9ab0ce;
+      font-size: 13px;
+    }
+    .bar, .panel {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.26);
+      backdrop-filter: blur(4px);
+    }
     .bar { display: flex; gap: 14px; align-items: center; padding: 12px 14px; margin-bottom: 14px; flex-wrap: wrap; }
     .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
     .ok { background: var(--ok); }
     .bad { background: var(--bad); }
     .panel { padding: 14px; margin-bottom: 14px; }
+    .panel-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid rgba(52, 80, 112, 0.4);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    .panel-title { margin: 0; font-size: 18px; color: #e4eeff; }
+    .panel-sub { margin: 3px 0 0; color: #96acca; font-size: 12px; }
     label { display: block; margin: 8px 0 4px; color: var(--muted); font-size: 13px; }
-    input, textarea, select, button { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #11161d; color: var(--text); padding: 8px; }
+    input, textarea, select, button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #0d1522;
+      color: var(--text);
+      padding: 8px 10px;
+      transition: border-color 130ms ease, box-shadow 130ms ease, background-color 130ms ease;
+    }
+    input:focus, textarea:focus, select:focus, button:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(127, 183, 255, 0.24);
+    }
     textarea { min-height: 74px; }
-    button { cursor: pointer; background: #1f2732; }
+    button { cursor: pointer; background: #162338; }
+    button:hover { border-color: var(--line-strong); background: #1b2b45; }
     .btn { width: auto; padding: 8px 12px; }
     .row { display: grid; gap: 10px; }
     .row-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
-    .table { width: 100%; border-collapse: collapse; }
-    th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; font-size: 13px; }
+    .table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    th, td {
+      border-bottom: 1px solid rgba(52, 80, 112, 0.38);
+      padding: 10px 9px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 13px;
+    }
+    th {
+      color: #a9bdd8;
+      font-size: 12px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      background: #0f1b2d;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .jobs-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(7, 12, 20, 0.45);
+    }
+    #jobsTable { min-width: 1060px; }
+    tr[data-job-row] td { background: rgba(10, 17, 28, 0.3); }
+    tr[data-job-row]:hover td { background: rgba(30, 51, 79, 0.36); }
+    tr[data-job-row].status-running td { box-shadow: inset 3px 0 0 #2f6e9f; }
+    tr[data-job-row].status-failed td { box-shadow: inset 3px 0 0 #aa4f58; }
+    tr[data-job-row].status-pending td { box-shadow: inset 3px 0 0 #60708a; }
+    tr[data-job-row].status-succeeded td { box-shadow: inset 3px 0 0 #3f8b67; }
+    tr[data-job-row].status-canceled td { box-shadow: inset 3px 0 0 #9d8454; }
+    tr[data-job-detail-row] td { background: rgba(8, 13, 21, 0.55); }
+    .mono { font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace; font-size: 12px; }
+    .truncate-2 {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      line-height: 1.28;
+    }
+    .cell-created, .cell-elapsed, .cell-status, .cell-id { white-space: nowrap; }
+    .cell-created { color: #a5bbd8; }
     .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; }
     .s-pending { background: #3a3f4b; }
     .s-running { background: #234766; }
     .s-succeeded { background: #22462f; }
     .s-failed { background: #5a2d2d; }
     .s-canceled { background: #5a4b2d; }
-    .actions button { width: auto; margin-right: 6px; }
+    .actions button { width: auto; margin-right: 6px; font-size: 12px; padding: 6px 10px; }
     details { margin: 8px 0; }
     pre { white-space: pre-wrap; background: #0d1117; padding: 10px; border-radius: 8px; border: 1px solid var(--line); max-height: 260px; overflow: auto; }
     .inline { display: flex; gap: 8px; align-items: center; }
@@ -51,6 +155,42 @@
     .tabs { display: flex; gap: 8px; margin-bottom: 8px; }
     .tab-btn { width: auto; padding: 8px 12px; border-radius: 999px; }
     .tab-btn.active { background: #2a3b52; border-color: #4f6787; }
+    .workspace-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .workspace-tabs { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .workspace-tab {
+      width: auto;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #0f1a2a;
+      color: #c9d8ee;
+      font-size: 12px;
+    }
+    .workspace-tab.active {
+      background: #243a57;
+      border-color: #5d82af;
+      color: #e7f0ff;
+      font-weight: 600;
+    }
+    .workspace-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .workspace-actions .btn { width: auto; }
+    .param-shell {
+      border: 1px solid rgba(52, 80, 112, 0.42);
+      border-radius: 10px;
+      background: rgba(9, 17, 29, 0.45);
+      padding: 10px;
+    }
+    .param-disabled {
+      opacity: 0.45;
+      filter: saturate(0.6);
+    }
     .hidden { display: none !important; }
     .prompt-list { display: grid; gap: 8px; }
     .prompt-card { border: 1px solid var(--line); border-radius: 8px; background: #121820; padding: 8px; }
@@ -70,11 +210,55 @@
       background: #132033;
       color: #d5e5ff;
     }
+    .queue-toolbar { display: grid; gap: 10px; margin: 10px 0 12px; }
+    .queue-summary { display: grid; gap: 10px; grid-template-columns: repeat(6, minmax(120px, 1fr)); }
+    .q-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      background: #111b2a;
+      min-height: 66px;
+    }
+    .q-card .k { font-size: 11px; color: #9eb0cb; text-transform: uppercase; letter-spacing: 0.04em; }
+    .q-card .v { font-size: 22px; font-weight: 700; margin-top: 4px; color: #e4efff; }
+    .q-card.running { border-color: #2f6e9f; background: #12253b; }
+    .q-card.failed { border-color: #874047; background: #311c22; }
+    .q-card.pending { border-color: #495f7e; background: #1a2536; }
+    .q-card.succeeded { border-color: #2f7252; background: #162820; }
+    .q-card.canceled { border-color: #7d6b3e; background: #2b2618; }
+    .queue-status-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .q-chip {
+      width: auto;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: #101928;
+      color: #b2c3dc;
+    }
+    .q-chip:hover { border-color: var(--line-strong); }
+    .q-chip.active { border-color: #5b7aa3; background: #223248; color: #dbe9ff; }
+    .queue-controls { display: grid; gap: 10px; grid-template-columns: 1fr 220px; }
+    .queue-controls input, .queue-controls select { width: 100%; }
+    .danger { border-color: #7a3838; background: #3a1f1f; }
+    .danger:hover { border-color: #965050; background: #472727; }
+    .actions .danger { border-color: #7a3838; background: #3a1f1f; }
+    tr.row-selected td { background: rgba(54, 92, 138, 0.55) !important; }
+    .sel-col { width: 34px; text-align: center; }
+    .sel-col input { width: auto; }
+    .queue-bulk-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .queue-bulk-actions .btn { width: auto; }
     @media (max-width: 780px) { .row-2 { grid-template-columns: 1fr; } }
+    @media (max-width: 780px) { .queue-controls { grid-template-columns: 1fr; } }
+    @media (max-width: 1020px) { .queue-summary { grid-template-columns: repeat(3, minmax(120px, 1fr)); } }
   </style>
 </head>
 <body>
   <div class="wrap">
+    <div class="page-hero">
+      <h1 class="title">Video Queue Control Panel</h1>
+      <div class="sub">Submit WAN jobs, track queue health, and triage failures with prompt-level detail.</div>
+    </div>
     <div class="bar">
       <select id="settingsPresetSelect" style="width:auto; min-width:220px;">
         <option value="">Settings Preset: (none)</option>
@@ -91,10 +275,23 @@
     </div>
 
     <div class="panel">
-      <h3>Submit Job</h3>
+      <div class="panel-head">
+        <div>
+          <h3 class="panel-title">Submit Job</h3>
+          <div class="panel-sub">Choose mode, inputs, workflow, and settings. Jobs are queued and tracked below.</div>
+        </div>
+      </div>
+      <div class="workspace-row">
+        <div id="workspaceTabs" class="workspace-tabs"></div>
+        <div class="workspace-actions">
+          <button id="newWorkspaceBtn" type="button" class="btn">+ New Tab</button>
+          <button id="renameWorkspaceBtn" type="button" class="btn">Rename</button>
+          <button id="closeWorkspaceBtn" type="button" class="btn">Close</button>
+        </div>
+      </div>
       <div class="tabs">
         <button id="tabBatch" type="button" class="tab-btn active">Batch</button>
-        <button id="tabSingle" type="button" class="tab-btn">Single I2V</button>
+        <button id="tabImageGen" type="button" class="tab-btn">Image Gen</button>
         <button id="tabUpscale" type="button" class="tab-btn">Upscale</button>
         <button id="tabUpscaleImages" type="button" class="tab-btn">Upscale Images</button>
       </div>
@@ -132,29 +329,37 @@
         </div>
 
         <div id="batchInputSection">
+          <div id="imageGenSourceSection" class="hidden">
+            <label>Image Gen Source</label>
+            <select id="imageGenSourceMode">
+              <option value="t2i">Text-to-Image (T2I)</option>
+              <option value="i2i">Image-to-Image (I2I)</option>
+            </select>
+            <div class="hint">Use T2I for prompt-only generation, or I2I to process one or more source images.</div>
+          </div>
           <label>Input Directory</label>
           <div class="input-with-btn">
             <input id="inputDir" list="inputDirHistory" placeholder="/home/cobra/ComfyUI/input/my_batch" />
             <button id="inputBrowseBtn" type="button" class="btn browse-btn">Browse...</button>
           </div>
+          <div id="batchDropZone" class="drop-zone hidden">Drop one or more images here for Batch Video I2V</div>
+          <div class="inline" id="batchDropActions" style="margin-top:6px;">
+            <button id="clearBatchDropBtn" type="button" class="btn hidden" style="width:auto;">Clear dropped batch</button>
+          </div>
+          <div id="batchThumbs" class="row-2 hidden"></div>
           <div id="upscaleImagesDropZone" class="drop-zone hidden">Drop one or more images here for Upscale Images mode</div>
           <div class="inline" id="upscaleImagesActions" style="margin-top:6px;">
             <button id="clearUpscaleDropBtn" type="button" class="btn hidden" style="width:auto;">Clear dropped images</button>
           </div>
           <div id="upscaleImagesThumbs" class="row-2 hidden"></div>
+          <div id="imageGenDropZone" class="drop-zone hidden">Drop one or more images here for Image Gen I2I mode</div>
+          <div class="inline" id="imageGenDropActions" style="margin-top:6px;">
+            <button id="clearImageGenDropBtn" type="button" class="btn hidden" style="width:auto;">Clear dropped images</button>
+          </div>
+          <div id="imageGenThumbs" class="row-2 hidden"></div>
           <datalist id="inputDirHistory"></datalist>
           <div class="hint">Accepts Linux absolute paths and pasted Windows/\\wsl.localhost paths.</div>
           <div id="defaultInputDirNotice" class="hint"></div>
-        </div>
-
-        <div id="singleInputSection" class="hidden">
-          <label>Input Image</label>
-          <div class="input-with-btn">
-            <input id="inputImage" placeholder="/home/cobra/ComfyUI/input/example.png" />
-            <button id="inputImageBrowseBtn" type="button" class="btn browse-btn">Browse...</button>
-          </div>
-          <div id="singleDropZone" class="drop-zone">Drop one image file here to fill the path</div>
-          <div class="hint">Select exactly one image for single I2V job submission.</div>
         </div>
 
         <div id="promptPresetSection" class="row-2">
@@ -173,7 +378,9 @@
           </div>
         </div>
 
-        <div id="paramFields"></div>
+        <div class="param-shell">
+          <div id="paramFields"></div>
+        </div>
         <div class="submit-actions">
           <button id="submitBtn">Submit</button>
           <button id="resetSavedBtn" type="button" class="btn">Reset Saved Options</button>
@@ -183,18 +390,42 @@
     </div>
 
     <div class="panel">
-      <div class="inline" style="justify-content: space-between; align-items: center;">
-        <h3 style="margin:0;">Queue</h3>
+      <div class="panel-head">
+        <div>
+          <h3 class="panel-title">Queue</h3>
+          <div class="panel-sub">Filter by state, inspect run settings, and cancel/retry jobs safely.</div>
+        </div>
         <button id="clearQueueBtn" type="button" class="btn" style="width:auto;">Clear Queue</button>
       </div>
-      <table class="table" id="jobsTable">
-        <thead>
-          <tr>
-            <th>ID</th><th>Name</th><th>Workflow</th><th>Input Dir</th><th>Status</th><th>Created</th><th>Elapsed</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+      <div class="queue-toolbar">
+        <div id="queueSummaryCards" class="queue-summary"></div>
+        <div id="queueStatusBar" class="queue-status-bar"></div>
+        <div class="queue-controls">
+          <input id="queueSearch" placeholder="Search jobs, input path, prompt IDs, errors..." />
+          <select id="queueSort">
+            <option value="actionable">Sort: Action priority (running/failed/pending)</option>
+            <option value="newest">Sort: Newest first</option>
+            <option value="oldest">Sort: Oldest first</option>
+            <option value="name">Sort: Job name</option>
+          </select>
+        </div>
+        <div class="queue-bulk-actions">
+          <button id="cancelSelectedBtn" type="button" class="btn danger" disabled>Cancel Selected</button>
+          <button id="clearSelectionBtn" type="button" class="btn" disabled>Clear Selection</button>
+          <span class="hint">Tip: Shift+click job checkboxes to select a range.</span>
+        </div>
+      </div>
+      <div class="jobs-table-wrap">
+        <table class="table" id="jobsTable">
+          <thead>
+            <tr>
+              <th class="sel-col"><input id="selectVisibleJobs" type="checkbox" aria-label="Select visible jobs" /></th>
+              <th>ID</th><th>Name</th><th>Workflow</th><th>Input Dir</th><th>Status</th><th>Created</th><th>Elapsed</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -213,10 +444,24 @@ let refreshJobsBusy = false;
 let refreshHealthBusy = false;
 let currentWorkflowName = '';
 let activeTab = 'batch';
+let imageGenSourceMode = 't2i';
 let defaultBatchInputDir = '';
 let defaultBatchInputExists = true;
 let droppedUpscaleInputDir = '';
 let droppedUpscaleUploading = false;
+let droppedBatchInputDir = '';
+let droppedBatchUploading = false;
+let droppedImageGenInputDir = '';
+let droppedImageGenUploading = false;
+let latestJobs = [];
+let jobDetailExpanded = new Set();
+let queueFilterStatuses = new Set();
+let queueSearchTerm = '';
+let queueSortMode = 'actionable';
+let actionInFlight = new Set();
+let selectedJobIds = new Set();
+let renderedJobIds = [];
+let lastSelectedAnchorJobId = null;
 
 function applyUpscaleDroppedStateUI() {
   const input = document.getElementById('inputDir');
@@ -237,10 +482,94 @@ function applyUpscaleDroppedStateUI() {
   }
 }
 
+function applyImageGenDroppedStateUI() {
+  const input = document.getElementById('inputDir');
+  const browse = document.getElementById('inputBrowseBtn');
+  const usingDropped = activeTab === 'image_gen' && imageGenSourceMode === 'i2i' && !!droppedImageGenInputDir;
+  const sourceSel = document.getElementById('imageGenSourceMode');
+  const isT2I = activeTab === 'image_gen' && imageGenSourceMode === 't2i';
+  if (input) {
+    if (isT2I) {
+      input.disabled = true;
+      input.placeholder = 'Not required for T2I';
+      if (!input.value) input.value = '(not required for T2I)';
+    } else {
+      input.disabled = usingDropped;
+      if (input.value === '(not required for T2I)') input.value = '';
+      if (usingDropped) {
+        input.placeholder = 'Using dropped I2I images (input dir ignored)';
+        if (!input.value) input.value = '(using dropped I2I images)';
+      } else {
+        if (input.value === '(not required for T2I)') input.value = '';
+        if (input.value === '(using dropped I2I images)') input.value = '';
+        input.placeholder = '/home/cobra/ComfyUI/input/my_batch';
+      }
+    }
+  }
+  if (browse) browse.disabled = isT2I || usingDropped;
+  if (sourceSel) sourceSel.disabled = activeTab !== 'image_gen';
+}
+
+function applyBatchDroppedStateUI() {
+  const input = document.getElementById('inputDir');
+  const browse = document.getElementById('inputBrowseBtn');
+  const usingDropped = activeTab === 'batch' && !!droppedBatchInputDir;
+  if (input) {
+    input.disabled = usingDropped;
+    if (usingDropped) {
+      input.placeholder = 'Using dropped batch images (input dir ignored)';
+      if (!input.value) input.value = '(using dropped batch images)';
+    } else {
+      if (input.value === '(using dropped batch images)') input.value = '';
+      input.placeholder = '/home/cobra/ComfyUI/input/my_batch';
+    }
+  }
+  if (browse) browse.disabled = usingDropped;
+}
+
+function renderDroppedThumbs(targetEl, files, limit = 12) {
+  if (!targetEl) return;
+  targetEl.innerHTML = '';
+  const list = Array.from(files || []).slice(0, limit);
+  if (list.length === 0) {
+    targetEl.classList.add('hidden');
+    return;
+  }
+  for (const f of list) {
+    const card = document.createElement('div');
+    card.style.display = 'flex';
+    card.style.gap = '8px';
+    card.style.alignItems = 'center';
+    card.style.padding = '6px';
+    card.style.border = '1px solid var(--line)';
+    card.style.borderRadius = '8px';
+    card.style.background = '#0f141b';
+    const img = document.createElement('img');
+    img.style.width = '44px';
+    img.style.height = '44px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '6px';
+    img.alt = String((f && f.name) || 'image');
+    try {
+      img.src = URL.createObjectURL(f);
+    } catch {
+      img.src = '';
+    }
+    const label = document.createElement('div');
+    label.className = 'hint';
+    label.textContent = String((f && f.name) || 'image');
+    card.appendChild(img);
+    card.appendChild(label);
+    targetEl.appendChild(card);
+  }
+  targetEl.classList.remove('hidden');
+}
+
 const WAN_POSITIVE_TEMPLATE = '(at 0 second: )(at 3 second: )(at 7 second: )';
 const UI_STATE_KEY = 'video_queue_ui_state_v1';
-const UI_STATE_VERSION = 1;
+const UI_STATE_VERSION = 2;
 const LEGACY_DEFAULT_INPUT_DIR = '/home/cobra/ComfyUI/input';
+const MAX_WORKSPACES = 8;
 
 function defaultUiState() {
   return {
@@ -251,15 +580,94 @@ function defaultUiState() {
       flip_orientation: false,
       move_processed: false,
       input_dir: '',
-      single_image: '',
       job_name: '',
-      active_tab: 'batch'
+      active_tab: 'batch',
+      image_gen_source_mode: 't2i'
     },
-    workflow_params: {}
+    workflow_params: {},
+    active_workspace_id: '',
+    workspaces: []
   };
 }
 
 let uiState = defaultUiState();
+
+function cloneJson(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+}
+
+function makeWorkspaceId() {
+  return `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function workspaceFromCurrent(name = '') {
+  const nowName = String(name || '').trim() || `Workspace ${Math.max(1, (uiState.workspaces || []).length + 1)}`;
+  return {
+    id: makeWorkspaceId(),
+    name: nowName,
+    global: cloneJson(uiState.global) || defaultUiState().global,
+    workflow_params: cloneJson(uiState.workflow_params) || {},
+    drop_state: {
+      batch_input_dir: String(droppedBatchInputDir || ''),
+      upscale_images_input_dir: String(droppedUpscaleInputDir || ''),
+      image_gen_input_dir: String(droppedImageGenInputDir || '')
+    },
+    preset_state: {
+      prompt_preset_name: '',
+      settings_preset_name: ''
+    }
+  };
+}
+
+function ensureWorkspaceModel() {
+  if (!Array.isArray(uiState.workspaces)) uiState.workspaces = [];
+  if (uiState.workspaces.length === 0) {
+    const ws = workspaceFromCurrent('Workspace 1');
+    uiState.workspaces = [ws];
+    uiState.active_workspace_id = ws.id;
+    return;
+  }
+  if (!uiState.workspaces.some((w) => String(w.id || '') === String(uiState.active_workspace_id || ''))) {
+    uiState.active_workspace_id = String(uiState.workspaces[0].id || '');
+  }
+}
+
+function getActiveWorkspace() {
+  ensureWorkspaceModel();
+  return uiState.workspaces.find((w) => String(w.id || '') === String(uiState.active_workspace_id || '')) || uiState.workspaces[0];
+}
+
+function persistUiIntoActiveWorkspace() {
+  const ws = getActiveWorkspace();
+  if (!ws) return;
+  ws.global = cloneJson(uiState.global) || defaultUiState().global;
+  ws.workflow_params = cloneJson(uiState.workflow_params) || {};
+  ws.drop_state = {
+    batch_input_dir: String(droppedBatchInputDir || ''),
+    upscale_images_input_dir: String(droppedUpscaleInputDir || ''),
+    image_gen_input_dir: String(droppedImageGenInputDir || '')
+  };
+  const promptSel = document.getElementById('promptPresetSelect');
+  const settingsSel = document.getElementById('settingsPresetSelect');
+  ws.preset_state = {
+    prompt_preset_name: promptSel ? String(promptSel.value || '') : String((ws.preset_state && ws.preset_state.prompt_preset_name) || ''),
+    settings_preset_name: settingsSel ? String(settingsSel.value || '') : String((ws.preset_state && ws.preset_state.settings_preset_name) || '')
+  };
+}
+
+function loadWorkspaceIntoUi(workspace) {
+  if (!workspace || typeof workspace !== 'object') return;
+  uiState.global = cloneJson(workspace.global) || defaultUiState().global;
+  uiState.workflow_params = cloneJson(workspace.workflow_params) || {};
+  const ds = workspace.drop_state && typeof workspace.drop_state === 'object' ? workspace.drop_state : {};
+  droppedBatchInputDir = String(ds.batch_input_dir || '');
+  droppedUpscaleInputDir = String(ds.upscale_images_input_dir || '');
+  droppedImageGenInputDir = String(ds.image_gen_input_dir || '');
+}
 
 function storageAvailable() {
   try {
@@ -323,7 +731,8 @@ function loadUiState() {
     }
 
     const next = defaultUiState();
-    if (parsed.version === UI_STATE_VERSION) {
+    const parsedVersion = Number(parsed.version || 1);
+    if (parsedVersion >= 1) {
       if (parsed.global && typeof parsed.global === 'object') {
         next.global.workflow_name = typeof parsed.global.workflow_name === 'string' ? parsed.global.workflow_name : '';
         next.global.resolution_preset = typeof parsed.global.resolution_preset === 'string' ? parsed.global.resolution_preset : '';
@@ -333,11 +742,11 @@ function loadUiState() {
         if (next.global.input_dir.trim() === LEGACY_DEFAULT_INPUT_DIR) {
           next.global.input_dir = '';
         }
-        next.global.single_image = typeof parsed.global.single_image === 'string' ? parsed.global.single_image : '';
         next.global.job_name = typeof parsed.global.job_name === 'string' ? parsed.global.job_name : '';
-        next.global.active_tab = (parsed.global.active_tab === 'single' || parsed.global.active_tab === 'upscale' || parsed.global.active_tab === 'upscale_images')
+        next.global.active_tab = (parsed.global.active_tab === 'image_gen' || parsed.global.active_tab === 'upscale' || parsed.global.active_tab === 'upscale_images')
           ? parsed.global.active_tab
           : 'batch';
+        next.global.image_gen_source_mode = parsed.global.image_gen_source_mode === 'i2i' ? 'i2i' : 't2i';
       }
       if (parsed.workflow_params && typeof parsed.workflow_params === 'object') {
         for (const [wfName, wfParams] of Object.entries(parsed.workflow_params)) {
@@ -346,16 +755,44 @@ function loadUiState() {
           next.workflow_params[wfName] = wfParams;
         }
       }
+      if (parsedVersion >= 2 && Array.isArray(parsed.workspaces)) {
+        next.workspaces = [];
+        for (const rawWs of parsed.workspaces) {
+          if (!rawWs || typeof rawWs !== 'object') continue;
+          const id = String(rawWs.id || '').trim();
+          if (!id) continue;
+          const ws = {
+            id,
+            name: String(rawWs.name || '').trim() || 'Workspace',
+            global: cloneJson(rawWs.global) || cloneJson(next.global) || defaultUiState().global,
+            workflow_params: cloneJson(rawWs.workflow_params) || {},
+            drop_state: cloneJson(rawWs.drop_state) || { batch_input_dir: '', upscale_images_input_dir: '', image_gen_input_dir: '' },
+            preset_state: cloneJson(rawWs.preset_state) || { prompt_preset_name: '', settings_preset_name: '' }
+          };
+          next.workspaces.push(ws);
+        }
+        next.active_workspace_id = typeof parsed.active_workspace_id === 'string' ? parsed.active_workspace_id : '';
+      }
     }
     uiState = next;
+    ensureWorkspaceModel();
+    // v1 migration: bootstrap first workspace from legacy singleton state.
+    if (parsedVersion < 2) {
+      uiState.workspaces = [workspaceFromCurrent('Workspace 1')];
+      uiState.active_workspace_id = uiState.workspaces[0].id;
+    }
+    loadWorkspaceIntoUi(getActiveWorkspace());
   } catch {
     uiState = defaultUiState();
+    ensureWorkspaceModel();
   }
 }
 
 function saveUiState() {
   if (!storageAvailable()) return;
   try {
+    persistUiIntoActiveWorkspace();
+    uiState.version = UI_STATE_VERSION;
     const payload = JSON.stringify(uiState);
     window.localStorage.setItem(UI_STATE_KEY, payload);
   } catch {
@@ -365,6 +802,7 @@ function saveUiState() {
 
 function clearUiState() {
   uiState = defaultUiState();
+  ensureWorkspaceModel();
   if (!storageAvailable()) return;
   try {
     window.localStorage.removeItem(UI_STATE_KEY);
@@ -459,6 +897,7 @@ function workflowLabel(wf) {
 
 function workflowCategoryForName(name) {
   const text = String(name || '').toLowerCase();
+  if (text.includes('image-gen') || text.includes('t2i') || text.includes('i2i')) return 'image_gen';
   if (text.includes('upscale-images')) return 'image_upscale';
   if (text.includes('upscale')) return 'video_upscale';
   return 'video_gen';
@@ -472,6 +911,7 @@ function workflowCategory(wf) {
 }
 
 function promptModeForTab(tabName) {
+  if (tabName === 'image_gen') return 'image_gen';
   if (tabName === 'upscale') return 'video_upscale';
   if (tabName === 'upscale_images') return 'image_upscale';
   return 'video_gen';
@@ -483,6 +923,7 @@ function promptModeForActiveTab() {
 
 function allowedWorkflowCategoriesForTab(tabName) {
   const mode = promptModeForTab(tabName);
+  if (mode === 'image_gen') return ['image_gen'];
   if (mode === 'video_upscale') return ['video_upscale'];
   if (mode === 'image_upscale') return ['image_upscale'];
   return ['video_gen'];
@@ -663,9 +1104,27 @@ function updatePromptPresetVisibility() {
 }
 
 function preferredWorkflowsForTab(tabName) {
+  if (tabName === 'image_gen') return ['image-gen-flux-img2img', 'image-gen-flux-t2i', 'image-gen-flux-i2i'];
   if (tabName === 'upscale') return ['upscale-interpolate-only', 'upscale-interpolate'];
   if (tabName === 'upscale_images') return ['upscale-images-i2v'];
   return [];
+}
+
+function imageGenWorkflowNeedsImageInput() {
+  const wf = workflowMap[document.getElementById('workflowSelect').value];
+  return String((wf && wf.input_type) || '').toLowerCase() === 'image';
+}
+
+function syncImageGenSourceForWorkflow() {
+  const sourceSel = document.getElementById('imageGenSourceMode');
+  if (!sourceSel) return;
+  const t2iOpt = sourceSel.querySelector('option[value="t2i"]');
+  const needsImage = activeTab === 'image_gen' && imageGenWorkflowNeedsImageInput();
+  if (t2iOpt) t2iOpt.disabled = needsImage;
+  if (needsImage && sourceSel.value !== 'i2i') {
+    sourceSel.value = 'i2i';
+    imageGenSourceMode = 'i2i';
+  }
 }
 
 function applyWorkflowFilterForActiveTab(preferredName='') {
@@ -702,20 +1161,30 @@ function applyWorkflowFilterForActiveTab(preferredName='') {
 }
 
 function setActiveTab(tabName, persist=true) {
-  const next = tabName === 'single'
-    ? 'single'
-    : (tabName === 'upscale' ? 'upscale' : (tabName === 'upscale_images' ? 'upscale_images' : 'batch'));
+  const next = tabName === 'image_gen'
+    ? 'image_gen'
+    : (tabName === 'upscale'
+    ? 'upscale'
+    : (tabName === 'upscale_images' ? 'upscale_images' : 'batch'));
   activeTab = next;
-  const isSingle = activeTab === 'single';
+  const isImageGen = activeTab === 'image_gen';
   const isUpscale = activeTab === 'upscale';
   const isUpscaleImages = activeTab === 'upscale_images';
+  const isBatch = activeTab === 'batch';
+  let isImageGenI2I = isImageGen && imageGenSourceMode === 'i2i';
 
-  document.getElementById('batchInputSection').classList.toggle('hidden', isSingle);
-  document.getElementById('singleInputSection').classList.toggle('hidden', !isSingle);
+  document.getElementById('batchInputSection').classList.remove('hidden');
+  document.getElementById('imageGenSourceSection').classList.toggle('hidden', !isImageGen);
+  document.getElementById('batchDropZone').classList.toggle('hidden', !isBatch);
+  document.getElementById('batchThumbs').classList.toggle('hidden', !isBatch || !droppedBatchInputDir);
+  document.getElementById('clearBatchDropBtn').classList.toggle('hidden', !isBatch || !droppedBatchInputDir);
   document.getElementById('upscaleImagesDropZone').classList.toggle('hidden', !isUpscaleImages);
   document.getElementById('upscaleImagesThumbs').classList.toggle('hidden', !isUpscaleImages);
+  document.getElementById('imageGenDropZone').classList.toggle('hidden', !isImageGenI2I);
+  document.getElementById('imageGenThumbs').classList.toggle('hidden', !isImageGenI2I || !droppedImageGenInputDir);
+  document.getElementById('clearImageGenDropBtn').classList.toggle('hidden', !isImageGenI2I || !droppedImageGenInputDir);
   document.getElementById('tabBatch').classList.toggle('active', activeTab === 'batch');
-  document.getElementById('tabSingle').classList.toggle('active', isSingle);
+  document.getElementById('tabImageGen').classList.toggle('active', isImageGen);
   document.getElementById('tabUpscale').classList.toggle('active', isUpscale);
   document.getElementById('tabUpscaleImages').classList.toggle('active', isUpscaleImages);
   if (applyWorkflowFilterForActiveTab()) {
@@ -724,13 +1193,21 @@ function setActiveTab(tabName, persist=true) {
   } else {
     updatePromptPresetVisibility();
   }
+  syncImageGenSourceForWorkflow();
+  isImageGenI2I = isImageGen && imageGenSourceMode === 'i2i';
+  document.getElementById('imageGenDropZone').classList.toggle('hidden', !isImageGenI2I);
+  document.getElementById('imageGenThumbs').classList.toggle('hidden', !isImageGenI2I || !droppedImageGenInputDir);
+  document.getElementById('clearImageGenDropBtn').classList.toggle('hidden', !isImageGenI2I || !droppedImageGenInputDir);
   loadPromptPresets().catch(() => {});
 
   if (persist) {
     uiState.global.active_tab = activeTab;
     saveUiState();
   }
+  applyBatchDroppedStateUI();
   applyUpscaleDroppedStateUI();
+  applyImageGenDroppedStateUI();
+  applyImageGenDroppedStateUI();
 }
 
 function readParamsFromForm() {
@@ -760,18 +1237,108 @@ function syncGlobalStateFromForm() {
   const flip = !!document.getElementById('flipOrientation').checked;
   const moveProcessed = !!document.getElementById('moveProcessed').checked;
   const inputDir = document.getElementById('inputDir').value.trim();
-  const inputImage = document.getElementById('inputImage').value.trim();
   const jobName = document.getElementById('jobName').value.trim();
+  const imageGenSource = document.getElementById('imageGenSourceMode').value || 't2i';
 
   uiState.global.workflow_name = workflow || '';
   uiState.global.resolution_preset = resolution || '';
   uiState.global.flip_orientation = flip;
   uiState.global.move_processed = moveProcessed;
   uiState.global.input_dir = inputDir;
-  uiState.global.single_image = inputImage;
   uiState.global.job_name = jobName;
   uiState.global.active_tab = activeTab;
+  uiState.global.image_gen_source_mode = imageGenSource === 'i2i' ? 'i2i' : 't2i';
   saveUiState();
+}
+
+function renderWorkspaceTabs() {
+  const host = document.getElementById('workspaceTabs');
+  if (!host) return;
+  ensureWorkspaceModel();
+  host.innerHTML = '';
+  for (const ws of uiState.workspaces) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'workspace-tab';
+    btn.textContent = String(ws.name || 'Workspace');
+    btn.dataset.workspaceId = String(ws.id || '');
+    if (String(ws.id || '') === String(uiState.active_workspace_id || '')) btn.classList.add('active');
+    host.appendChild(btn);
+  }
+}
+
+function activateWorkspace(workspaceId) {
+  const targetId = String(workspaceId || '').trim();
+  if (!targetId) return;
+  persistUiIntoActiveWorkspace();
+  const ws = (uiState.workspaces || []).find((x) => String(x.id || '') === targetId);
+  if (!ws) return;
+  uiState.active_workspace_id = targetId;
+  loadWorkspaceIntoUi(ws);
+  applySavedGlobalState();
+  currentWorkflowName = document.getElementById('workflowSelect').value || '';
+  renderParamFields();
+  syncGlobalStateFromForm();
+  const promptSel = document.getElementById('promptPresetSelect');
+  const settingsSel = document.getElementById('settingsPresetSelect');
+  if (promptSel && ws.preset_state && typeof ws.preset_state.prompt_preset_name === 'string') {
+    promptSel.value = ws.preset_state.prompt_preset_name;
+    Promise.resolve(applySelectedPromptPreset()).catch(() => {});
+  }
+  if (settingsSel && ws.preset_state && typeof ws.preset_state.settings_preset_name === 'string') {
+    settingsSel.value = ws.preset_state.settings_preset_name;
+    applySelectedSettingsPreset();
+  }
+  applyBatchDroppedStateUI();
+  applyUpscaleDroppedStateUI();
+  applyImageGenDroppedStateUI();
+  renderWorkspaceTabs();
+}
+
+function createWorkspace() {
+  ensureWorkspaceModel();
+  if (uiState.workspaces.length >= MAX_WORKSPACES) {
+    document.getElementById('submitMsg').textContent = `Workspace limit reached (${MAX_WORKSPACES}).`;
+    return;
+  }
+  persistUiIntoActiveWorkspace();
+  const ws = workspaceFromCurrent(`Workspace ${uiState.workspaces.length + 1}`);
+  uiState.workspaces.push(ws);
+  uiState.active_workspace_id = ws.id;
+  saveUiState();
+  renderWorkspaceTabs();
+}
+
+function renameActiveWorkspace() {
+  const ws = getActiveWorkspace();
+  if (!ws) return;
+  const nextName = window.prompt('Workspace name:', String(ws.name || 'Workspace'));
+  if (nextName === null) return;
+  const clean = String(nextName || '').trim().slice(0, 40);
+  ws.name = clean || String(ws.name || 'Workspace');
+  saveUiState();
+  renderWorkspaceTabs();
+}
+
+function closeActiveWorkspace() {
+  ensureWorkspaceModel();
+  if (uiState.workspaces.length <= 1) {
+    document.getElementById('submitMsg').textContent = 'At least one workspace must remain open.';
+    return;
+  }
+  const ws = getActiveWorkspace();
+  if (!ws) return;
+  const idx = uiState.workspaces.findIndex((x) => String(x.id || '') === String(ws.id || ''));
+  if (idx < 0) return;
+  uiState.workspaces.splice(idx, 1);
+  const next = uiState.workspaces[Math.min(idx, uiState.workspaces.length - 1)] || uiState.workspaces[0];
+  uiState.active_workspace_id = String(next.id || '');
+  loadWorkspaceIntoUi(next);
+  applySavedGlobalState();
+  currentWorkflowName = document.getElementById('workflowSelect').value || '';
+  renderParamFields();
+  syncGlobalStateFromForm();
+  renderWorkspaceTabs();
 }
 
 function applySavedGlobalState() {
@@ -779,8 +1346,8 @@ function applySavedGlobalState() {
   const flip = document.getElementById('flipOrientation');
   const moveProcessed = document.getElementById('moveProcessed');
   const input = document.getElementById('inputDir');
-  const image = document.getElementById('inputImage');
   const jobName = document.getElementById('jobName');
+  const imageGenSourceSel = document.getElementById('imageGenSourceMode');
 
   const preset = String(uiState.global.resolution_preset || '');
   if (preset && [...resolution.options].some(opt => opt.value === preset)) {
@@ -790,11 +1357,12 @@ function applySavedGlobalState() {
   moveProcessed.checked = !!uiState.global.move_processed;
   if (uiState.global.input_dir) input.value = uiState.global.input_dir;
   else input.value = defaultBatchInputDir || '';
-  if (uiState.global.single_image) image.value = uiState.global.single_image;
   if (uiState.global.job_name) jobName.value = uiState.global.job_name;
-  const t = uiState.global.active_tab === 'single'
-    ? 'single'
-    : (uiState.global.active_tab === 'upscale'
+  imageGenSourceMode = uiState.global.image_gen_source_mode === 'i2i' ? 'i2i' : 't2i';
+  if (imageGenSourceSel) imageGenSourceSel.value = imageGenSourceMode;
+  const t = uiState.global.active_tab === 'image_gen'
+      ? 'image_gen'
+      : (uiState.global.active_tab === 'upscale'
       ? 'upscale'
       : (uiState.global.active_tab === 'upscale_images' ? 'upscale_images' : 'batch'));
   setActiveTab(t, false);
@@ -806,7 +1374,6 @@ function resetSavedOptions() {
   const workflowSelect = document.getElementById('workflowSelect');
   const resolution = document.getElementById('resolutionPreset');
   const input = document.getElementById('inputDir');
-  const image = document.getElementById('inputImage');
   const flip = document.getElementById('flipOrientation');
   const moveProcessed = document.getElementById('moveProcessed');
   const jobName = document.getElementById('jobName');
@@ -814,10 +1381,11 @@ function resetSavedOptions() {
   if (workflowSelect.options.length > 0) workflowSelect.selectedIndex = 0;
   if (resolution.options.length > 0) resolution.selectedIndex = 0;
   input.value = defaultBatchInputDir || '';
-  image.value = '';
   flip.checked = false;
   moveProcessed.checked = false;
   jobName.value = '';
+  imageGenSourceMode = 't2i';
+  document.getElementById('imageGenSourceMode').value = 't2i';
   setActiveTab('batch', false);
   currentWorkflowName = workflowSelect.value || '';
   renderParamFields();
@@ -869,6 +1437,7 @@ function renderParamFields() {
 
   function makeParamWrap(name, p) {
     const wrap = document.createElement('div');
+    wrap.dataset.paramWrap = name;
     const label = document.createElement('label');
     label.textContent = p.label || name;
     wrap.appendChild(label);
@@ -891,7 +1460,7 @@ function renderParamFields() {
       row.className = 'inline';
       row.appendChild(el);
       const t = document.createElement('span');
-      t.textContent = name;
+      t.textContent = p.label || name;
       row.appendChild(t);
       wrap.appendChild(row);
     } else if (p.type === 'text' && /lora/i.test(name)) {
@@ -939,8 +1508,8 @@ function renderParamFields() {
     const hint = document.createElement('div');
     hint.className = 'hint';
     hint.textContent = idx === 1
-      ? '0 disables this extra LoRA. Base 4-step lightx2v LoRAs remain enabled.'
-      : '0 disables this extra LoRA slot.';
+      ? 'Use the checkbox to enable this extra LoRA. Base 4-step lightx2v LoRAs are always on.'
+      : 'Use the checkbox to enable this extra LoRA slot.';
     container.appendChild(hint);
   }
 
@@ -962,6 +1531,32 @@ function renderParamFields() {
     body.className = 'row';
     details.appendChild(body);
     extraContainers[idx] = { details, body, used: false };
+  }
+
+  function syncExtraLoraEnabledUI() {
+    for (const idx of [1, 2, 3]) {
+      const keyBase = idx === 1 ? 'extra_lora' : `extra_lora${idx}`;
+      const enabledEl = getParamElement(`${keyBase}_enabled`);
+      if (!enabledEl) continue;
+      const enabled = !!enabledEl.checked;
+      const fields = [
+        `${keyBase}_high_name`,
+        `${keyBase}_low_name`,
+        `${keyBase}_strength_high`,
+        `${keyBase}_strength_low`,
+        `${keyBase}_strength`, // backward compatibility
+      ];
+      for (const n of fields) {
+        const el = getParamElement(n);
+        if (!el) continue;
+        el.disabled = !enabled;
+        const wrap = el.closest('[data-param-wrap]');
+        if (wrap) wrap.classList.toggle('param-disabled', !enabled);
+      }
+      const container = extraContainers[idx];
+      if (!container) continue;
+      if (enabled) container.details.setAttribute('open', 'open');
+    }
   }
 
   const stageContainers = {};
@@ -988,7 +1583,7 @@ function renderParamFields() {
     if (idx > 0) {
       extraContainers[idx].used = true;
       extraContainers[idx].body.appendChild(wrap);
-      if (name === `extra_lora${idx === 1 ? '' : idx}_strength`) {
+      if (name === `extra_lora${idx === 1 ? '' : idx}_enabled`) {
         appendExtraHint(extraContainers[idx].body, idx);
       }
       continue;
@@ -1034,32 +1629,19 @@ function renderParamFields() {
   updateResolutionControlsForWorkflow();
   updatePromptPresetVisibility();
   updateUpscaleNetHint();
+  syncExtraLoraEnabledUI();
+  for (const idx of [1, 2, 3]) {
+    const keyBase = idx === 1 ? 'extra_lora' : `extra_lora${idx}`;
+    const enabledEl = getParamElement(`${keyBase}_enabled`);
+    if (enabledEl) {
+      enabledEl.addEventListener('change', syncExtraLoraEnabledUI);
+      enabledEl.addEventListener('input', syncExtraLoraEnabledUI);
+    }
+  }
 }
 
 async function normalizeInputDirField() {
   const input = document.getElementById('inputDir');
-  const msg = document.getElementById('submitMsg');
-  const raw = input.value.trim();
-  if (!raw) return '';
-
-  try {
-    const data = await jfetch('/api/input-dirs/normalize', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ path: raw })
-    });
-    const normalized = data.normalized_path || raw;
-    input.value = normalized;
-    syncGlobalStateFromForm();
-    return normalized;
-  } catch (e) {
-    msg.textContent = `Path error: ${e.message}`;
-    throw e;
-  }
-}
-
-async function normalizeInputImageField() {
-  const input = document.getElementById('inputImage');
   const msg = document.getElementById('submitMsg');
   const raw = input.value.trim();
   if (!raw) return '';
@@ -1151,9 +1733,9 @@ function buildSettingsPayloadFromForm() {
     flip_orientation: !!document.getElementById('flipOrientation').checked,
     move_processed: !!document.getElementById('moveProcessed').checked,
     input_dir: document.getElementById('inputDir').value || '',
-    single_image: document.getElementById('inputImage').value || '',
     job_name: document.getElementById('jobName').value || '',
     active_tab: activeTab,
+    image_gen_source_mode: document.getElementById('imageGenSourceMode').value || 't2i',
     prompt_preset_name: document.getElementById('promptPresetSelect').value || '',
     workflow_params: uiState.workflow_params || {},
   };
@@ -1167,17 +1749,19 @@ function applySettingsPayload(payload) {
   const flip = document.getElementById('flipOrientation');
   const moveProcessed = document.getElementById('moveProcessed');
   const inputDir = document.getElementById('inputDir');
-  const inputImage = document.getElementById('inputImage');
   const jobName = document.getElementById('jobName');
+  const imageGenSourceSel = document.getElementById('imageGenSourceMode');
   const promptPresetSel = document.getElementById('promptPresetSelect');
 
   if (payload.workflow_params && typeof payload.workflow_params === 'object') {
     uiState.workflow_params = payload.workflow_params;
   }
 
-  const tab = payload.active_tab === 'single'
-    ? 'single'
-    : (payload.active_tab === 'upscale'
+  imageGenSourceMode = payload.image_gen_source_mode === 'i2i' ? 'i2i' : 't2i';
+  if (imageGenSourceSel) imageGenSourceSel.value = imageGenSourceMode;
+  const tab = payload.active_tab === 'image_gen'
+      ? 'image_gen'
+      : (payload.active_tab === 'upscale'
       ? 'upscale'
       : (payload.active_tab === 'upscale_images' ? 'upscale_images' : 'batch'));
   setActiveTab(tab, false);
@@ -1196,7 +1780,6 @@ function applySettingsPayload(payload) {
   flip.checked = !!payload.flip_orientation;
   moveProcessed.checked = !!payload.move_processed;
   inputDir.value = String(payload.input_dir || '');
-  inputImage.value = String(payload.single_image || '');
   jobName.value = String(payload.job_name || '');
 
   const promptPresetName = String(payload.prompt_preset_name || '');
@@ -1383,8 +1966,8 @@ async function submitJob() {
 
   const params = readParamsFromForm();
   const rawJobName = document.getElementById('jobName').value.trim();
-  const modePrefix = activeTab === 'single'
-    ? 'single'
+  const modePrefix = activeTab === 'image_gen'
+    ? 'image_gen'
     : (activeTab === 'upscale'
       ? 'upscale'
       : (activeTab === 'upscale_images' ? 'upscale_images' : 'batch'));
@@ -1394,23 +1977,25 @@ async function submitJob() {
   uiState.workflow_params[workflow_name] = params;
   syncGlobalStateFromForm();
 
-  let pathPayload = {};
-  let endpoint = '/api/jobs';
-  if (activeTab === 'single') {
-    let input_image;
-    try {
-      input_image = await normalizeInputImageField();
-    } catch {
+  let input_dir = '';
+  const imageGenSource = (document.getElementById('imageGenSourceMode').value || 't2i');
+  if (activeTab === 'image_gen' && imageGenSource === 't2i' && String((wf && wf.input_type) || '').toLowerCase() === 'image') {
+    msg.textContent = 'Selected Image Gen workflow requires input image(s). Switch source mode to I2I.';
+    return;
+  }
+  if (activeTab === 'image_gen' && imageGenSource === 't2i') {
+    input_dir = '';
+  } else
+  {
+    if (activeTab === 'batch' && droppedBatchUploading) {
+      msg.textContent = 'Upload in progress. Wait for dropped images to finish uploading.';
       return;
     }
-    if (!input_image) {
-      msg.textContent = 'Single I2V requires one input image.';
-      return;
-    }
-    endpoint = '/api/jobs/single';
-    pathPayload = { input_image };
-  } else {
-    let input_dir = '';
+    if (activeTab === 'batch' && droppedBatchInputDir) {
+      input_dir = droppedBatchInputDir;
+      document.getElementById('inputDir').value = droppedBatchInputDir;
+      syncGlobalStateFromForm();
+    } else
     if (activeTab === 'upscale_images' && droppedUpscaleUploading) {
       msg.textContent = 'Upload in progress. Wait for dropped images to finish uploading.';
       return;
@@ -1419,6 +2004,15 @@ async function submitJob() {
       input_dir = droppedUpscaleInputDir;
       document.getElementById('inputDir').value = droppedUpscaleInputDir;
       syncGlobalStateFromForm();
+    } else
+    if (activeTab === 'image_gen' && imageGenSource === 'i2i' && droppedImageGenUploading) {
+      msg.textContent = 'Upload in progress. Wait for dropped images to finish uploading.';
+      return;
+    }
+    if (activeTab === 'image_gen' && imageGenSource === 'i2i' && droppedImageGenInputDir) {
+      input_dir = droppedImageGenInputDir;
+      document.getElementById('inputDir').value = droppedImageGenInputDir;
+      syncGlobalStateFromForm();
     } else {
       try {
         input_dir = await normalizeInputDirField();
@@ -1426,8 +2020,9 @@ async function submitJob() {
         return;
       }
     }
-    pathPayload = { input_dir };
   }
+  const endpoint = '/api/jobs';
+  const pathPayload = { input_dir };
 
   try {
     const data = await jfetch(endpoint, {
@@ -1441,7 +2036,7 @@ async function submitJob() {
         resolution_preset: supportsResolution ? resolutionPreset : null,
         flip_orientation: supportsResolution ? flipOrientation : false,
         move_processed: moveProcessed,
-        split_by_input: activeTab !== 'single'
+        split_by_input: !(activeTab === 'image_gen' && imageGenSource === 't2i')
       })
     });
     const ids = Array.isArray(data.job_ids) ? data.job_ids : [];
@@ -1488,34 +2083,6 @@ async function browseInputDir() {
   }
 }
 
-async function browseInputImage() {
-  const btn = document.getElementById('inputImageBrowseBtn');
-  const input = document.getElementById('inputImage');
-  const msg = document.getElementById('submitMsg');
-  const previousLabel = btn.textContent;
-
-  btn.disabled = true;
-  btn.textContent = 'Picking...';
-  try {
-    const current = input.value.trim();
-    const data = await jfetch('/api/pick-image', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ start_path: current || null })
-    });
-    input.value = data.path || '';
-    if (data.path) {
-      msg.textContent = `Selected image: ${data.path}`;
-      syncGlobalStateFromForm();
-    }
-  } catch (e) {
-    msg.textContent = `Image browse error: ${e.message}`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = previousLabel;
-  }
-}
-
 async function uploadDroppedImage(fileObj, subdir='') {
   const filename = (fileObj && fileObj.name) ? String(fileObj.name) : 'upload.png';
   const headers = {
@@ -1530,11 +2097,29 @@ async function uploadDroppedImage(fileObj, subdir='') {
   });
 }
 
-function setupSingleDropZone() {
-  const zone = document.getElementById('singleDropZone');
-  const input = document.getElementById('inputImage');
+function setupBatchDropZone() {
+  const zone = document.getElementById('batchDropZone');
+  const input = document.getElementById('inputDir');
+  const thumbs = document.getElementById('batchThumbs');
+  const clearBtn = document.getElementById('clearBatchDropBtn');
   const msg = document.getElementById('submitMsg');
   if (!zone || !input) return;
+
+  function setClearVisible(visible) {
+    if (!clearBtn) return;
+    clearBtn.classList.toggle('hidden', !visible);
+  }
+
+  function clearDroppedBatchState(showMessage = false) {
+    droppedBatchInputDir = '';
+    if (thumbs) {
+      thumbs.innerHTML = '';
+      thumbs.classList.add('hidden');
+    }
+    setClearVisible(false);
+    applyBatchDroppedStateUI();
+    if (showMessage) msg.textContent = 'Cleared dropped images for Batch mode.';
+  }
 
   const activate = () => zone.classList.add('active');
   const deactivate = () => zone.classList.remove('active');
@@ -1550,38 +2135,69 @@ function setupSingleDropZone() {
   zone.addEventListener('dragleave', () => {
     deactivate();
   });
-  zone.addEventListener('drop', (e) => {
+  zone.addEventListener('drop', async (e) => {
     e.preventDefault();
     deactivate();
-    const path = firstDroppedPath(e.dataTransfer);
-    const files = e.dataTransfer && e.dataTransfer.files ? e.dataTransfer.files : null;
-
-    if (path) {
-      input.value = path;
-      syncGlobalStateFromForm();
-      normalizeInputImageField()
-        .then(() => {
-          msg.textContent = `Selected image: ${input.value}`;
-        })
-        .catch(() => {});
-      return;
-    }
-
+    const dt = e.dataTransfer;
+    const files = dt && dt.files ? dt.files : null;
     if (!files || files.length === 0) {
-      msg.textContent = 'Could not read dropped file. Use Browse or paste full path.';
+      msg.textContent = 'Drop image files to upload for Batch mode.';
       return;
     }
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.bmp'];
+    const valid = [];
+    for (let i = 0; i < files.length; i += 1) {
+      const f = files[i];
+      const name = String((f && f.name) || '').toLowerCase();
+      if (allowed.some((ext) => name.endsWith(ext))) valid.push(f);
+    }
+    if (valid.length === 0) {
+      msg.textContent = 'No supported image files found in drop.';
+      return;
+    }
+    renderDroppedThumbs(thumbs, valid, 12);
+    setClearVisible(true);
 
-    uploadDroppedImage(files[0])
-      .then((data) => {
-        input.value = String((data && data.path) || '');
-        syncGlobalStateFromForm();
-        msg.textContent = `Uploaded + selected image: ${input.value}`;
-      })
-      .catch((err) => {
-        msg.textContent = `Drop upload error: ${err.message}`;
-      });
+    const dropToken = `uploads/batch_i2v/${Date.now()}`;
+    droppedBatchUploading = true;
+    msg.textContent = `Uploading ${valid.length} image(s) for Batch mode...`;
+    try {
+      const uploaded = [];
+      for (const fileObj of valid) {
+        const data = await uploadDroppedImage(fileObj, dropToken);
+        uploaded.push(data);
+      }
+      const dir = String((uploaded[0] && uploaded[0].dir) || '');
+      if (!dir) {
+        msg.textContent = 'Upload succeeded but could not resolve input directory.';
+        return;
+      }
+      droppedBatchInputDir = dir;
+      input.value = '';
+      applyBatchDroppedStateUI();
+      syncGlobalStateFromForm();
+      msg.textContent = `Uploaded ${uploaded.length} image(s) for Batch mode.`;
+    } catch (err) {
+      msg.textContent = `Batch drop upload error: ${err.message}`;
+      droppedBatchInputDir = '';
+      applyBatchDroppedStateUI();
+      setClearVisible(false);
+      if (thumbs) thumbs.classList.add('hidden');
+    } finally {
+      droppedBatchUploading = false;
+    }
   });
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      clearDroppedBatchState(true);
+      if (activeTab === 'batch') {
+        input.value = '';
+        applyBatchDroppedStateUI();
+        syncGlobalStateFromForm();
+      }
+    });
+  }
 }
 
 function setupUpscaleImagesDropZone() {
@@ -1612,46 +2228,6 @@ function setupUpscaleImagesDropZone() {
 
   const activate = () => zone.classList.add('active');
   const deactivate = () => zone.classList.remove('active');
-
-  function renderThumbs(files) {
-    if (!thumbs) return;
-    thumbs.innerHTML = '';
-    const list = Array.from(files || []).slice(0, 8);
-    if (list.length === 0) {
-      thumbs.classList.add('hidden');
-      setClearVisible(false);
-      return;
-    }
-    for (const f of list) {
-      const card = document.createElement('div');
-      card.style.display = 'flex';
-      card.style.gap = '8px';
-      card.style.alignItems = 'center';
-      card.style.padding = '6px';
-      card.style.border = '1px solid var(--line)';
-      card.style.borderRadius = '8px';
-      card.style.background = '#0f141b';
-      const img = document.createElement('img');
-      img.style.width = '44px';
-      img.style.height = '44px';
-      img.style.objectFit = 'cover';
-      img.style.borderRadius = '6px';
-      img.alt = String((f && f.name) || 'image');
-      try {
-        img.src = URL.createObjectURL(f);
-      } catch {
-        img.src = '';
-      }
-      const label = document.createElement('div');
-      label.className = 'hint';
-      label.textContent = String((f && f.name) || 'image');
-      card.appendChild(img);
-      card.appendChild(label);
-      thumbs.appendChild(card);
-    }
-    thumbs.classList.remove('hidden');
-    setClearVisible(true);
-  }
 
   zone.addEventListener('dragenter', (e) => {
     e.preventDefault();
@@ -1685,7 +2261,8 @@ function setupUpscaleImagesDropZone() {
       msg.textContent = 'No supported image files found in drop.';
       return;
     }
-    renderThumbs(valid);
+    renderDroppedThumbs(thumbs, valid, 8);
+    setClearVisible(true);
 
     const dropToken = `uploads/upscale_images/${Date.now()}`;
     droppedUpscaleUploading = true;
@@ -1728,14 +2305,307 @@ function setupUpscaleImagesDropZone() {
   }
 }
 
+function setupImageGenDropZone() {
+  const zone = document.getElementById('imageGenDropZone');
+  const input = document.getElementById('inputDir');
+  const thumbs = document.getElementById('imageGenThumbs');
+  const clearBtn = document.getElementById('clearImageGenDropBtn');
+  const msg = document.getElementById('submitMsg');
+  if (!zone || !input) return;
+
+  function setClearVisible(visible) {
+    if (!clearBtn) return;
+    clearBtn.classList.toggle('hidden', !visible);
+  }
+
+  function clearDroppedImageGenState(showMessage = false) {
+    droppedImageGenInputDir = '';
+    if (thumbs) {
+      thumbs.innerHTML = '';
+      thumbs.classList.add('hidden');
+    }
+    setClearVisible(false);
+    applyImageGenDroppedStateUI();
+    if (showMessage) {
+      msg.textContent = 'Cleared dropped images for Image Gen I2I mode.';
+    }
+  }
+
+  const activate = () => zone.classList.add('active');
+  const deactivate = () => zone.classList.remove('active');
+
+  zone.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    activate();
+  });
+  zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    activate();
+  });
+  zone.addEventListener('dragleave', () => {
+    deactivate();
+  });
+  zone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    deactivate();
+    const dt = e.dataTransfer;
+    const files = dt && dt.files ? dt.files : null;
+    if (!files || files.length === 0) {
+      msg.textContent = 'Drop image files to upload for Image Gen I2I mode.';
+      return;
+    }
+
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.bmp'];
+    const valid = [];
+    for (let i = 0; i < files.length; i += 1) {
+      const f = files[i];
+      const name = String((f && f.name) || '').toLowerCase();
+      if (allowed.some(ext => name.endsWith(ext))) valid.push(f);
+    }
+    if (valid.length === 0) {
+      msg.textContent = 'No supported image files found in drop.';
+      return;
+    }
+    renderDroppedThumbs(thumbs, valid, 8);
+    setClearVisible(true);
+
+    const dropToken = `uploads/image_gen_i2i/${Date.now()}`;
+    droppedImageGenUploading = true;
+    msg.textContent = `Uploading ${valid.length} image(s)...`;
+    try {
+      const uploaded = [];
+      for (const fileObj of valid) {
+        const data = await uploadDroppedImage(fileObj, dropToken);
+        uploaded.push(data);
+      }
+      const dir = String((uploaded[0] && uploaded[0].dir) || '');
+      if (!dir) {
+        msg.textContent = 'Upload succeeded but could not resolve input directory.';
+        return;
+      }
+      droppedImageGenInputDir = dir;
+      input.value = '';
+      applyImageGenDroppedStateUI();
+      syncGlobalStateFromForm();
+      msg.textContent = `Uploaded ${uploaded.length} image(s) for Image Gen I2I mode.`;
+    } catch (err) {
+      msg.textContent = `Image Gen drop upload error: ${err.message}`;
+      droppedImageGenInputDir = '';
+      applyImageGenDroppedStateUI();
+      setClearVisible(false);
+    } finally {
+      droppedImageGenUploading = false;
+    }
+  });
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      clearDroppedImageGenState(true);
+      if (activeTab === 'image_gen') {
+        input.value = '';
+        applyImageGenDroppedStateUI();
+        syncGlobalStateFromForm();
+      }
+    });
+  }
+}
+
 function statusBadge(status) {
   return `<span class="badge s-${status}">${status}</span>`;
+}
+
+function statusPriority(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'running') return 0;
+  if (s === 'failed') return 1;
+  if (s === 'pending') return 2;
+  if (s === 'canceled') return 3;
+  if (s === 'succeeded') return 4;
+  return 5;
+}
+
+function tsValue(v) {
+  const t = Date.parse(String(v || ''));
+  return Number.isFinite(t) ? t : 0;
+}
+
+function computeJobStatusCounts(jobs) {
+  const counts = { pending: 0, running: 0, failed: 0, succeeded: 0, canceled: 0, total: 0 };
+  for (const j of jobs) {
+    const s = String(j.status || '').toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(counts, s)) counts[s] += 1;
+    counts.total += 1;
+  }
+  return counts;
+}
+
+function renderQueueSummaryCards(jobs) {
+  const el = document.getElementById('queueSummaryCards');
+  if (!el) return;
+  const counts = computeJobStatusCounts(jobs);
+  const cards = [
+    ['total', 'Total'],
+    ['running', 'Running'],
+    ['failed', 'Failed'],
+    ['pending', 'Pending'],
+    ['succeeded', 'Succeeded'],
+    ['canceled', 'Canceled'],
+  ];
+  el.innerHTML = '';
+  for (const [key, label] of cards) {
+    const card = document.createElement('div');
+    card.className = `q-card ${key}`;
+    card.innerHTML = `<div class="k">${label}</div><div class="v">${Number(counts[key] || 0)}</div>`;
+    el.appendChild(card);
+  }
+}
+
+function renderQueueStatusBar(jobs) {
+  const bar = document.getElementById('queueStatusBar');
+  if (!bar) return;
+  const counts = computeJobStatusCounts(jobs);
+  const statuses = ['running', 'failed', 'pending', 'succeeded', 'canceled'];
+  bar.innerHTML = '';
+
+  const mkChip = (label, statusKey = null) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'q-chip';
+    if (statusKey && queueFilterStatuses.has(statusKey)) btn.classList.add('active');
+    btn.textContent = label;
+    if (!statusKey && queueFilterStatuses.size === 0) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      if (!statusKey) {
+        queueFilterStatuses = new Set();
+      } else if (queueFilterStatuses.has(statusKey)) {
+        queueFilterStatuses.delete(statusKey);
+      } else {
+        queueFilterStatuses.add(statusKey);
+      }
+      renderJobsTable();
+    });
+    bar.appendChild(btn);
+  };
+
+  mkChip(`All ${counts.total}`, null);
+  for (const st of statuses) mkChip(`${st} ${counts[st] || 0}`, st);
+}
+
+function sortedJobs(jobs) {
+  const out = [...jobs];
+  if (queueSortMode === 'newest') {
+    out.sort((a, b) => tsValue(b.created_at) - tsValue(a.created_at) || Number(b.id || 0) - Number(a.id || 0));
+    return out;
+  }
+  if (queueSortMode === 'oldest') {
+    out.sort((a, b) => tsValue(a.created_at) - tsValue(b.created_at) || Number(a.id || 0) - Number(b.id || 0));
+    return out;
+  }
+  if (queueSortMode === 'name') {
+    out.sort((a, b) => {
+      const na = String(a.job_name || '').trim().toLowerCase();
+      const nb = String(b.job_name || '').trim().toLowerCase();
+      return na.localeCompare(nb) || Number(b.id || 0) - Number(a.id || 0);
+    });
+    return out;
+  }
+
+  out.sort((a, b) => {
+    const pa = statusPriority(a.status);
+    const pb = statusPriority(b.status);
+    if (pa !== pb) return pa - pb;
+    return tsValue(b.created_at) - tsValue(a.created_at) || Number(b.id || 0) - Number(a.id || 0);
+  });
+  return out;
+}
+
+function jobSearchHaystack(job) {
+  const fields = [
+    job.id,
+    job.job_name,
+    job.workflow_name,
+    job.input_dir,
+    job.status,
+    job.last_error,
+  ];
+  return fields.map((v) => String(v || '')).join(' ').toLowerCase();
+}
+
+function filteredJobs(jobs) {
+  const term = queueSearchTerm.trim().toLowerCase();
+  let out = jobs;
+  if (queueFilterStatuses.size > 0) {
+    out = out.filter((j) => queueFilterStatuses.has(String(j.status || '').toLowerCase()));
+  }
+  if (term) out = out.filter((j) => jobSearchHaystack(j).includes(term));
+  return sortedJobs(out);
+}
+
+function pruneSelectedJobs() {
+  const existing = new Set((latestJobs || []).map((j) => String(j.id)));
+  for (const id of Array.from(selectedJobIds)) {
+    if (!existing.has(id)) selectedJobIds.delete(id);
+  }
+  if (lastSelectedAnchorJobId && !existing.has(lastSelectedAnchorJobId)) {
+    lastSelectedAnchorJobId = null;
+  }
+}
+
+function updateBulkSelectionUi() {
+  const cancelBtn = document.getElementById('cancelSelectedBtn');
+  const clearBtn = document.getElementById('clearSelectionBtn');
+  const count = selectedJobIds.size;
+  if (cancelBtn) {
+    cancelBtn.disabled = count === 0 || actionInFlight.has('cancel_selected');
+    cancelBtn.textContent = count > 0 ? `Cancel Selected (${count})` : 'Cancel Selected';
+  }
+  if (clearBtn) clearBtn.disabled = count === 0;
+}
+
+function updateSelectVisibleCheckbox() {
+  const selectVisible = document.getElementById('selectVisibleJobs');
+  if (!selectVisible) return;
+  const visibleIds = renderedJobIds || [];
+  if (visibleIds.length === 0) {
+    selectVisible.checked = false;
+    selectVisible.indeterminate = false;
+    selectVisible.disabled = true;
+    return;
+  }
+  selectVisible.disabled = false;
+  let selectedVisible = 0;
+  for (const id of visibleIds) {
+    if (selectedJobIds.has(id)) selectedVisible += 1;
+  }
+  selectVisible.checked = selectedVisible === visibleIds.length;
+  selectVisible.indeterminate = selectedVisible > 0 && selectedVisible < visibleIds.length;
+}
+
+function applyRowSelectionRange(currentJobId, shouldSelect) {
+  const currentIdx = renderedJobIds.indexOf(String(currentJobId));
+  const anchorIdx = lastSelectedAnchorJobId ? renderedJobIds.indexOf(String(lastSelectedAnchorJobId)) : -1;
+  if (currentIdx < 0 || anchorIdx < 0) return false;
+  const start = Math.min(anchorIdx, currentIdx);
+  const end = Math.max(anchorIdx, currentIdx);
+  for (let i = start; i <= end; i += 1) {
+    const id = renderedJobIds[i];
+    if (shouldSelect) selectedJobIds.add(id);
+    else selectedJobIds.delete(id);
+  }
+  return true;
 }
 
 async function jobAction(jobId, action, triggerBtn) {
   const msg = document.getElementById('submitMsg');
   const btn = triggerBtn || null;
   const original = btn ? btn.textContent : '';
+  const key = `${action}:${jobId}`;
+  if (actionInFlight.has(key)) return;
+  if (action === 'cancel') {
+    const ok = window.confirm(`Cancel job ${jobId}? Running prompt(s) will stop after current prompt completes.`);
+    if (!ok) return;
+  }
+  actionInFlight.add(key);
   if (btn) {
     btn.disabled = true;
     btn.textContent = action === 'cancel' ? 'Canceling...' : 'Retrying...';
@@ -1763,6 +2633,7 @@ async function jobAction(jobId, action, triggerBtn) {
   } catch (e) {
     msg.textContent = `${action} failed for job ${jobId}: ${e.message}`;
   } finally {
+    actionInFlight.delete(key);
     if (btn) {
       btn.disabled = false;
       btn.textContent = original;
@@ -1770,15 +2641,70 @@ async function jobAction(jobId, action, triggerBtn) {
   }
 }
 
+async function cancelSelectedJobs() {
+  pruneSelectedJobs();
+  const msg = document.getElementById('submitMsg');
+  const ids = Array.from(selectedJobIds).map((v) => Number(v)).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (ids.length === 0) {
+    updateBulkSelectionUi();
+    return;
+  }
+  const ok = window.confirm(`Cancel ${ids.length} selected job(s)? Running prompt(s) will stop after current prompt completes.`);
+  if (!ok) return;
+  if (actionInFlight.has('cancel_selected')) return;
+
+  actionInFlight.add('cancel_selected');
+  updateBulkSelectionUi();
+  let succeeded = 0;
+  let failed = 0;
+  let totalRunning = 0;
+  let totalCanceledPending = 0;
+
+  try {
+    for (const jobId of ids) {
+      try {
+        const data = await jfetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
+        const c = data.cancel_summary || {};
+        totalRunning += Number(c.running_prompts || 0);
+        totalCanceledPending += Number(c.canceled_pending || 0);
+        selectedJobIds.delete(String(jobId));
+        succeeded += 1;
+      } catch (_err) {
+        failed += 1;
+      }
+    }
+
+    if (failed > 0) {
+      msg.textContent = `Bulk cancel finished: ${succeeded} succeeded, ${failed} failed.`;
+    } else if (totalRunning > 0) {
+      msg.textContent = `Cancel requested for ${succeeded} job(s): canceled ${totalCanceledPending} pending prompt(s), waiting for ${totalRunning} running prompt(s).`;
+    } else {
+      msg.textContent = `Canceled ${succeeded} job(s): canceled ${totalCanceledPending} pending prompt(s).`;
+    }
+
+    lastJobsSig = '';
+    lastHealthSig = '';
+    await refreshJobs();
+    await refreshHealth();
+  } finally {
+    actionInFlight.delete('cancel_selected');
+    updateBulkSelectionUi();
+    updateSelectVisibleCheckbox();
+  }
+}
+
 async function clearQueueFromUI() {
   const msg = document.getElementById('submitMsg');
   const btn = document.getElementById('clearQueueBtn');
-  const c1 = window.confirm('Clear entire queue and delete all jobs/prompts?');
+  if (actionInFlight.has('clear_queue')) return;
+  const counts = computeJobStatusCounts(latestJobs);
+  const c1 = window.confirm(`Clear entire queue and delete all jobs/prompts? Current jobs: ${counts.total}.`);
   if (!c1) return;
   const c2 = window.confirm('Final confirmation: this will permanently delete the entire queue history. Continue?');
   if (!c2) return;
 
   const prev = btn.textContent;
+  actionInFlight.add('clear_queue');
   btn.disabled = true;
   btn.textContent = 'Clearing...';
   try {
@@ -1793,6 +2719,7 @@ async function clearQueueFromUI() {
   } catch (e) {
     msg.textContent = `Clear queue error: ${e.message}`;
   } finally {
+    actionInFlight.delete('clear_queue');
     btn.disabled = false;
     btn.textContent = prev;
   }
@@ -1877,8 +2804,106 @@ async function loadJobDetail(jobId, detailsEl) {
 }
 
 function computeJobsSig(jobs) {
-  const compact = jobs.map(j => [j.id, j.job_name, j.status, j.prompt_count, j.created_at, j.finished_at]);
+  const compact = jobs.map(j => [j.id, j.job_name, j.status, j.prompt_count, j.created_at, j.finished_at, j.last_error]);
   return JSON.stringify(compact);
+}
+
+function renderJobsTable() {
+  const tbody = document.querySelector('#jobsTable tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  pruneSelectedJobs();
+  const jobs = filteredJobs(latestJobs);
+  renderedJobIds = jobs.map((j) => String(j.id));
+  for (const job of jobs) {
+    const wf = workflowMap[job.workflow_name];
+    const wfLabel = wf ? (wf.display_name || job.workflow_name) : job.workflow_name;
+    const jobName = String(job.job_name || '').trim() || '-';
+    const tr = document.createElement('tr');
+    if (selectedJobIds.has(String(job.id))) tr.classList.add('row-selected');
+    tr.classList.add(`status-${String(job.status || '').toLowerCase()}`);
+    tr.setAttribute('data-job-row', String(job.id));
+    tr.innerHTML = `
+      <td class="sel-col"><input data-select-job="${job.id}" type="checkbox" ${selectedJobIds.has(String(job.id)) ? 'checked' : ''} aria-label="Select job ${job.id}" /></td>
+      <td class="cell-id mono">${job.id}</td>
+      <td title="${esc(jobName)}"><div class="truncate-2">${esc(jobName)}</div></td>
+      <td title="${esc(wfLabel)}"><div class="truncate-2">${esc(wfLabel)}</div></td>
+      <td title="${esc(job.input_dir || '')}"><div class="truncate-2 mono">${esc(job.input_dir)}</div></td>
+      <td class="cell-status">${statusBadge(job.status)}</td>
+      <td class="cell-created mono">${esc(job.created_at || '-')}</td>
+      <td class="cell-elapsed mono">${elapsed(job.created_at, job.finished_at)}</td>
+      <td class="actions">
+        <button data-cancel="${job.id}" class="danger">Cancel</button>
+        <button data-retry="${job.id}">Retry</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+
+    const dtr = document.createElement('tr');
+    dtr.setAttribute('data-job-detail-row', String(job.id));
+    const td = document.createElement('td');
+    td.colSpan = 9;
+
+    const details = document.createElement('details');
+    details.setAttribute('data-job-detail', String(job.id));
+    const sum = document.createElement('summary');
+    sum.textContent = `Job ${job.id} Prompts (${job.prompt_count ?? 0})`;
+    details.appendChild(sum);
+
+    const detailBody = document.createElement('div');
+    detailBody.setAttribute('data-detail-body', '1');
+    detailBody.textContent = 'Open to load details.';
+    details.appendChild(detailBody);
+
+    let loaded = false;
+    details.addEventListener('toggle', () => {
+      if (details.open) jobDetailExpanded.add(String(job.id));
+      else jobDetailExpanded.delete(String(job.id));
+      if (details.open && !loaded) {
+        loaded = true;
+        loadJobDetail(job.id, details);
+      }
+    });
+
+    if (jobDetailExpanded.has(String(job.id))) {
+      details.open = true;
+      loaded = true;
+      loadJobDetail(job.id, details);
+    }
+
+    td.appendChild(details);
+    dtr.appendChild(td);
+    tbody.appendChild(dtr);
+  }
+
+  document.querySelectorAll('[data-cancel]').forEach((b) => {
+    b.onclick = () => jobAction(b.dataset.cancel, 'cancel', b);
+  });
+  document.querySelectorAll('[data-retry]').forEach((b) => {
+    b.onclick = () => jobAction(b.dataset.retry, 'retry', b);
+  });
+  document.querySelectorAll('[data-select-job]').forEach((cb) => {
+    cb.addEventListener('click', (e) => {
+      const jobId = String(cb.dataset.selectJob || '');
+      if (!jobId) return;
+      const shouldSelect = !!cb.checked;
+      if (e.shiftKey && applyRowSelectionRange(jobId, shouldSelect)) {
+        lastSelectedAnchorJobId = jobId;
+        renderJobsTable();
+        return;
+      }
+      if (shouldSelect) selectedJobIds.add(jobId);
+      else selectedJobIds.delete(jobId);
+      lastSelectedAnchorJobId = jobId;
+      const row = cb.closest('tr[data-job-row]');
+      if (row) row.classList.toggle('row-selected', shouldSelect);
+      updateBulkSelectionUi();
+      updateSelectVisibleCheckbox();
+    });
+  });
+  updateBulkSelectionUi();
+  updateSelectVisibleCheckbox();
 }
 
 async function refreshJobs() {
@@ -1886,62 +2911,18 @@ async function refreshJobs() {
   refreshJobsBusy = true;
   try {
     const jobs = await jfetch('/api/jobs');
+    latestJobs = Array.isArray(jobs) ? jobs : [];
+    renderQueueSummaryCards(latestJobs);
+    renderQueueStatusBar(latestJobs);
     const sig = computeJobsSig(jobs);
-    if (sig === lastJobsSig) return;
-    lastJobsSig = sig;
-
-    const tbody = document.querySelector('#jobsTable tbody');
-    tbody.innerHTML = '';
-
-    for (const job of jobs) {
-      const wf = workflowMap[job.workflow_name];
-      const wfLabel = wf ? (wf.display_name || job.workflow_name) : job.workflow_name;
-      const jobName = String(job.job_name || '').trim() || '-';
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${job.id}</td>
-        <td>${esc(jobName)}</td>
-        <td>${esc(wfLabel)}</td>
-        <td>${esc(job.input_dir)}</td>
-        <td>${statusBadge(job.status)}</td>
-        <td>${esc(job.created_at || '-')}</td>
-        <td>${elapsed(job.created_at, job.finished_at)}</td>
-        <td class="actions">
-          <button data-cancel="${job.id}">Cancel</button>
-          <button data-retry="${job.id}">Retry</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-
-      const dtr = document.createElement('tr');
-      const td = document.createElement('td');
-      td.colSpan = 8;
-
-      const details = document.createElement('details');
-      const sum = document.createElement('summary');
-      sum.textContent = `Job ${job.id} Prompts (${job.prompt_count ?? 0})`;
-      details.appendChild(sum);
-
-      const detailBody = document.createElement('div');
-      detailBody.setAttribute('data-detail-body', '1');
-      detailBody.textContent = 'Open to load details.';
-      details.appendChild(detailBody);
-
-      let loaded = false;
-      details.addEventListener('toggle', () => {
-        if (details.open && !loaded) {
-          loaded = true;
-          loadJobDetail(job.id, details);
-        }
-      });
-
-      td.appendChild(details);
-      dtr.appendChild(td);
-      tbody.appendChild(dtr);
+    if (sig === lastJobsSig) {
+      pruneSelectedJobs();
+      updateBulkSelectionUi();
+      updateSelectVisibleCheckbox();
+      return;
     }
-
-    document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => jobAction(b.dataset.cancel, 'cancel', b));
-    document.querySelectorAll('[data-retry]').forEach(b => b.onclick = () => jobAction(b.dataset.retry, 'retry', b));
+    lastJobsSig = sig;
+    renderJobsTable();
   } finally {
     refreshJobsBusy = false;
   }
@@ -1972,18 +2953,27 @@ document.getElementById('workflowSelect').addEventListener('change', () => {
   saveCurrentWorkflowParams();
   currentWorkflowName = document.getElementById('workflowSelect').value || '';
   renderParamFields();
+  syncImageGenSourceForWorkflow();
+  if (activeTab === 'image_gen') setActiveTab('image_gen', false);
   syncGlobalStateFromForm();
 });
 document.getElementById('submitBtn').addEventListener('click', submitJob);
 document.getElementById('resetSavedBtn').addEventListener('click', resetSavedOptions);
+document.getElementById('newWorkspaceBtn').addEventListener('click', createWorkspace);
+document.getElementById('renameWorkspaceBtn').addEventListener('click', renameActiveWorkspace);
+document.getElementById('closeWorkspaceBtn').addEventListener('click', closeActiveWorkspace);
+document.getElementById('workspaceTabs').addEventListener('click', (e) => {
+  const btn = e.target && e.target.closest ? e.target.closest('[data-workspace-id]') : null;
+  if (!btn) return;
+  activateWorkspace(btn.dataset.workspaceId);
+});
 document.getElementById('inputBrowseBtn').addEventListener('click', browseInputDir);
-document.getElementById('inputImageBrowseBtn').addEventListener('click', browseInputImage);
 document.getElementById('tabBatch').addEventListener('click', () => {
   setActiveTab('batch');
   syncGlobalStateFromForm();
 });
-document.getElementById('tabSingle').addEventListener('click', () => {
-  setActiveTab('single');
+document.getElementById('tabImageGen').addEventListener('click', () => {
+  setActiveTab('image_gen');
   syncGlobalStateFromForm();
 });
 document.getElementById('tabUpscale').addEventListener('click', () => {
@@ -1994,17 +2984,29 @@ document.getElementById('tabUpscaleImages').addEventListener('click', () => {
   setActiveTab('upscale_images');
   syncGlobalStateFromForm();
 });
+document.getElementById('imageGenSourceMode').addEventListener('change', () => {
+  imageGenSourceMode = document.getElementById('imageGenSourceMode').value === 'i2i' ? 'i2i' : 't2i';
+  applyImageGenDroppedStateUI();
+  setActiveTab('image_gen');
+  syncGlobalStateFromForm();
+});
 document.getElementById('inputDir').addEventListener('input', () => {
   const v = document.getElementById('inputDir').value.trim();
+  if (activeTab === 'batch' && droppedBatchInputDir && v !== droppedBatchInputDir) {
+    droppedBatchInputDir = '';
+    applyBatchDroppedStateUI();
+  }
   if (activeTab === 'upscale_images' && droppedUpscaleInputDir && v !== droppedUpscaleInputDir) {
     droppedUpscaleInputDir = '';
     applyUpscaleDroppedStateUI();
   }
+  if (activeTab === 'image_gen' && imageGenSourceMode === 'i2i' && droppedImageGenInputDir && v !== droppedImageGenInputDir) {
+    droppedImageGenInputDir = '';
+    applyImageGenDroppedStateUI();
+  }
   syncGlobalStateFromForm();
 });
 document.getElementById('inputDir').addEventListener('blur', () => { normalizeInputDirField().catch(() => {}); });
-document.getElementById('inputImage').addEventListener('input', syncGlobalStateFromForm);
-document.getElementById('inputImage').addEventListener('blur', () => { normalizeInputImageField().catch(() => {}); });
 document.getElementById('jobName').addEventListener('input', syncGlobalStateFromForm);
 document.getElementById('promptPresetSelect').addEventListener('change', applySelectedPromptPreset);
 document.getElementById('savePromptPresetBtn').addEventListener('click', savePromptPresetFromUI);
@@ -2013,6 +3015,29 @@ document.getElementById('saveSettingsPresetBtn').addEventListener('click', saveS
 document.getElementById('resolutionPreset').addEventListener('change', syncGlobalStateFromForm);
 document.getElementById('flipOrientation').addEventListener('change', syncGlobalStateFromForm);
 document.getElementById('moveProcessed').addEventListener('change', syncGlobalStateFromForm);
+document.getElementById('queueSearch').addEventListener('input', () => {
+  queueSearchTerm = document.getElementById('queueSearch').value || '';
+  renderJobsTable();
+});
+document.getElementById('queueSort').addEventListener('change', () => {
+  queueSortMode = document.getElementById('queueSort').value || 'actionable';
+  renderJobsTable();
+});
+document.getElementById('selectVisibleJobs').addEventListener('change', () => {
+  const checked = !!document.getElementById('selectVisibleJobs').checked;
+  for (const id of renderedJobIds) {
+    if (checked) selectedJobIds.add(id);
+    else selectedJobIds.delete(id);
+  }
+  if (!checked) lastSelectedAnchorJobId = null;
+  renderJobsTable();
+});
+document.getElementById('cancelSelectedBtn').addEventListener('click', cancelSelectedJobs);
+document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+  selectedJobIds.clear();
+  lastSelectedAnchorJobId = null;
+  renderJobsTable();
+});
 document.getElementById('pauseBtn').addEventListener('click', () => jfetch('/api/queue/pause', {method:'POST'}).then(() => { lastHealthSig = ''; return refreshHealth(); }));
 document.getElementById('resumeBtn').addEventListener('click', () => jfetch('/api/queue/resume', {method:'POST'}).then(() => { lastHealthSig = ''; return refreshHealth(); }));
 document.getElementById('reloadWorkflowsBtn').addEventListener('click', reloadWorkflowsFromUI);
@@ -2021,6 +3046,7 @@ document.getElementById('clearQueueBtn').addEventListener('click', clearQueueFro
 
 (async function init() {
   loadUiState();
+  renderWorkspaceTabs();
   await loadLoras();
   await loadUpscaleModels();
   await loadResolutionPresets();
@@ -2029,9 +3055,14 @@ document.getElementById('clearQueueBtn').addEventListener('click', clearQueueFro
   await loadSettingsPresets();
   await loadDefaultInputDir();
   await loadWorkflows();
-  setupSingleDropZone();
+  renderWorkspaceTabs();
+  setupBatchDropZone();
   setupUpscaleImagesDropZone();
+  setupImageGenDropZone();
+  applyBatchDroppedStateUI();
   applyUpscaleDroppedStateUI();
+  applyImageGenDroppedStateUI();
+  document.getElementById('queueSort').value = 'actionable';
   await refreshHealth();
   await refreshJobs();
   setInterval(refreshHealth, 5000);

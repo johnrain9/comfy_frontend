@@ -2,8 +2,8 @@ name: wan-context-lite-2stage
 display_name: "WAN ContextWindow Single Pass (81f)"
 group: "WAN V2"
 category: "video_gen"
-description: "Single 81-frame pass with high/low noise samplers and selectable LoRAs"
-template: /home/cobra/video_queue/workflow_defs_v2/templates/wan22_enhancedH_q5L_2stage_gguf_vertical_ctxwindow_singlepass.api.json
+description: "Single 81-frame pass rebuilt from ContextWindow2 base with fixed 4-step LoRA and up to 2 optional extra LoRA slots"
+template: /home/cobra/video_queue/workflow_defs_v2/templates/wan22_enhancedH_q5L_2stage_gguf_vertical_ctxwindow2_singlepass_rebuilt.api.json
 input_type: image
 input_extensions: [.png, .jpg, .jpeg, .webp, .bmp]
 
@@ -45,24 +45,68 @@ parameters:
     label: "Output prefix"
     type: text
     default: "video/auto_batch"
-  lora_high_name:
-    label: "LoRA high-noise"
+  extra_lora_enabled:
+    label: "Enable Extra LoRA 1"
+    type: bool
+    default: false
+  extra_lora_high_name:
+    label: "Extra LoRA 1 (high-noise)"
     type: text
-    nodes: ["101"]
+    nodes: ["201"]
     field: lora_name
-    default: "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors"
-  lora_low_name:
-    label: "LoRA low-noise"
+    default: ""
+  extra_lora_low_name:
+    label: "Extra LoRA 1 (low-noise)"
     type: text
-    nodes: ["102"]
+    nodes: ["202"]
     field: lora_name
-    default: "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors"
-  lora_strength:
-    label: "LoRA strength"
+    default: ""
+  extra_lora_strength_high:
+    label: "Extra LoRA 1 strength (high-noise)"
     type: float
-    nodes: ["101", "102"]
+    nodes: ["201"]
     field: strength_model
-    default: 1.0
+    default: 0.8
+    min: 0.0
+    max: 2.0
+  extra_lora_strength_low:
+    label: "Extra LoRA 1 strength (low-noise)"
+    type: float
+    nodes: ["202"]
+    field: strength_model
+    default: 0.8
+    min: 0.0
+    max: 2.0
+  extra_lora2_enabled:
+    label: "Enable Extra LoRA 2"
+    type: bool
+    default: false
+  extra_lora2_high_name:
+    label: "Extra LoRA 2 (high-noise)"
+    type: text
+    nodes: ["211"]
+    field: lora_name
+    default: ""
+  extra_lora2_low_name:
+    label: "Extra LoRA 2 (low-noise)"
+    type: text
+    nodes: ["212"]
+    field: lora_name
+    default: ""
+  extra_lora2_strength_high:
+    label: "Extra LoRA 2 strength (high-noise)"
+    type: float
+    nodes: ["211"]
+    field: strength_model
+    default: 0.8
+    min: 0.0
+    max: 2.0
+  extra_lora2_strength_low:
+    label: "Extra LoRA 2 strength (low-noise)"
+    type: float
+    nodes: ["212"]
+    field: strength_model
+    default: 0.8
     min: 0.0
     max: 2.0
 

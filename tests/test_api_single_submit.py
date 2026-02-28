@@ -1,6 +1,35 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
+
+
+def _json_obj(value):
+    return json.loads(value) if isinstance(value, str) else value
+
+
+def _normalize_stage_batch_token(value):
+    if isinstance(value, dict):
+        return {k: _normalize_stage_batch_token(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_normalize_stage_batch_token(v) for v in value]
+    if isinstance(value, str):
+        return re.sub(r"(_video_queue_staging/)[^/]+/", r"\1<BATCH>/", value)
+    return value
+
+
+def _collect_stage_refs(value, out: list[str]) -> None:
+    if isinstance(value, dict):
+        for item in value.values():
+            _collect_stage_refs(item, out)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _collect_stage_refs(item, out)
+        return
+    if isinstance(value, str) and "_video_queue_staging/" in value:
+        out.append(value)
 
 
 def test_single_submit_success_and_fanout(queue_server):
@@ -101,9 +130,63 @@ def test_batch_and_single_shared_options_produce_equivalent_prompt_payload(queue
 
     assert len(batch_detail["prompts"]) == 1
     assert len(single_detail["prompts"]) == 1
-    assert batch_detail["prompts"][0]["prompt_json"] == single_detail["prompts"][0]["prompt_json"]
+    batch_prompt = _normalize_stage_batch_token(_json_obj(batch_detail["prompts"][0]["prompt_json"]))
+    single_prompt = _normalize_stage_batch_token(_json_obj(single_detail["prompts"][0]["prompt_json"]))
+    assert batch_prompt == single_prompt
 
     queue_server.request("POST", "/api/queue/resume")
+
+
+def test_single_submit_stages_prompt_input_and_preserves_original_input_file(queue_server, tmp_path):
+    queue_server.request("POST", "/api/queue/pause")
+    queue_server.fake_comfy.set_complete_after(1)
+    try:
+        source_image = tmp_path / "source_input.png"
+        source_image.write_bytes(queue_server.sample_image.read_bytes())
+        job = queue_server.request(
+            "POST",
+            "/api/jobs/single",
+            {
+                "workflow_name": "wan-context-lite-2stage",
+                "input_image": str(source_image),
+                "params": {"tries": 1},
+            },
+            expected=201,
+        )
+
+        detail = queue_server.request("GET", f"/api/jobs/{job['job_id']}")
+        prompt = detail["prompts"][0]
+        assert prompt["input_file"] == str(source_image)
+
+        payload = _json_obj(prompt["prompt_json"])
+        encoded = json.dumps(payload, sort_keys=True)
+        assert "_video_queue_staging/" in encoded
+        assert str(source_image) not in encoded
+
+        refs: list[str] = []
+        _collect_stage_refs(payload, refs)
+        assert refs
+        first_ref = refs[0]
+        staged_path = Path(first_ref)
+        if not staged_path.is_absolute():
+            staged_path = (queue_server.comfy_root / "input" / staged_path).resolve()
+        assert staged_path.exists()
+        assert staged_path.read_bytes() == source_image.read_bytes()
+
+        source_image.unlink()
+        assert not source_image.exists()
+        assert staged_path.exists()
+        queue_server.request("POST", "/api/queue/resume")
+
+        def _done():
+            d = queue_server.request("GET", f"/api/jobs/{job['job_id']}")
+            return d if d["job"]["status"] in {"succeeded", "failed", "canceled"} else None
+
+        terminal = queue_server.wait_until(_done, timeout=10, step=0.2)
+        assert terminal["job"]["status"] == "succeeded"
+    finally:
+        queue_server.fake_comfy.set_complete_after(50)
+        queue_server.request("POST", "/api/queue/resume")
 
 
 def test_api_submit_persists_distinct_stage_prompts_for_2stage_split_workflow(queue_server):

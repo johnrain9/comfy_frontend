@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { api } from '$lib/api';
-  import type { PromptPreset, SettingsPreset, WorkflowDef, WorkflowParamDef } from '$lib/types';
+  import type { AutoPromptItem, PromptPreset, SettingsPreset, WorkflowDef, WorkflowParamDef } from '$lib/types';
   import DropZone from './DropZone.svelte';
   import ParamFields from './ParamFields.svelte';
   import ResolutionPicker from './ResolutionPicker.svelte';
@@ -34,8 +34,10 @@
   let submitMsg = '';
   let submitting = false;
   let loadingMeta = false;
+  let autoBusy = false;
   let thumbnailUrls: string[] = [];
   let lastPromptMode = '';
+  let autoPromptItems: AutoPromptItem[] = [];
 
   $: activeWs =
     $workspaceState.workspaces.find((w) => w.id === $workspaceState.active_workspace_id) ??
@@ -83,6 +85,8 @@
     !(activeTab === 'image_gen' && activeWs?.image_gen_source_mode === 't2i');
 
   $: effectiveInputDir = (activeWs?.dropped_input_dir || activeWs?.input_dir || '').trim();
+
+  $: autoRowsByPath = Object.fromEntries(autoPromptItems.map((item) => [item.path, item]));
 
   function patchWorkspace(patch: Record<string, unknown>): void {
     if (!activeWs) return;
@@ -194,10 +198,12 @@
 
     const subdir = `uploads/v2/${activeWs.id}/${Date.now()}`;
     let uploadedDir = '';
+    const uploadedPaths: string[] = [];
     try {
       for (const file of files) {
         const uploaded = await api.uploadInputImage(file, subdir, { timeoutMs: 30_000 });
         uploadedDir = uploaded.dir;
+        uploadedPaths.push(uploaded.path);
       }
     } catch (error) {
       submitMsg = error instanceof Error ? error.message : String(error);
@@ -205,15 +211,108 @@
     }
 
     if (uploadedDir) {
-      patchWorkspace({ input_dir: uploadedDir, dropped_input_dir: uploadedDir });
+      patchWorkspace({ input_dir: uploadedDir, dropped_input_dir: uploadedDir, dropped_input_paths: uploadedPaths });
       submitMsg = `Uploaded ${files.length} file(s) to ${uploadedDir}`;
     }
   }
 
   function clearDropped(): void {
     cleanupThumbs();
-    patchWorkspace({ dropped_input_dir: '' });
+    patchWorkspace({ dropped_input_dir: '', dropped_input_paths: [] });
     submitMsg = 'Dropped file set cleared.';
+  }
+
+  function splitPromptKeys(workflow: WorkflowDef): string[] {
+    return Object.keys(workflow.parameters)
+      .filter((k) => /^positive_prompt_stage\d+$/i.test(k))
+      .sort((a, b) => Number(a.replace(/\D+/g, '')) - Number(b.replace(/\D+/g, '')));
+  }
+
+  function perFileParamsFromAuto(workflow: WorkflowDef): Record<string, Record<string, unknown>> {
+    const out: Record<string, Record<string, unknown>> = {};
+    const splitKeys = splitPromptKeys(workflow);
+    for (const item of autoPromptItems) {
+      const path = String(item.path || '').trim();
+      if (!path) continue;
+      const row: Record<string, unknown> = {};
+      if (splitKeys.length > 0) {
+        if (item.motion_prompts && typeof item.motion_prompts === 'object') {
+          for (let i = 0; i < splitKeys.length; i += 1) {
+            const clipKey = `clip_${i + 1}`;
+            row[splitKeys[i]] = String(item.motion_prompts[clipKey] || '');
+          }
+        } else if (item.motion_prompt) {
+          for (const key of splitKeys) row[key] = String(item.motion_prompt || '');
+        }
+      } else {
+        row.positive_prompt = String(item.motion_prompt || '');
+      }
+      if (Object.keys(row).length > 0) out[path] = row;
+    }
+    return out;
+  }
+
+  async function runAutoPrompt(stage: 'caption' | 'motion' | 'both'): Promise<void> {
+    if (!selectedWorkflow || !activeWs) return;
+    const imagePaths = (activeWs.dropped_input_paths || []).map((p) => String(p));
+    if (!imagePaths.length && stage !== 'motion') {
+      submitMsg = 'Drop/upload images first for auto-prompt generation.';
+      return;
+    }
+
+    const captions: Record<string, string> = {};
+    for (const item of autoPromptItems) {
+      if (item.path && item.caption) captions[item.path] = String(item.caption);
+    }
+    if (stage === 'motion' && Object.keys(captions).length === 0) {
+      submitMsg = 'No captions available. Generate captions first or run both.';
+      return;
+    }
+
+    autoBusy = true;
+    submitMsg = '';
+    try {
+      const result = await api.autoPrompt(
+        {
+          image_paths: stage === 'motion' ? Object.keys(captions) : imagePaths,
+          workflow_name: selectedWorkflow.name,
+          stage,
+          captions,
+        },
+        { timeoutMs: 120_000 },
+      );
+      const byPath = new Map(autoPromptItems.map((x) => [x.path, { ...x }]));
+      for (const item of result.items || []) {
+        const prev = byPath.get(item.path) || { path: item.path };
+        byPath.set(item.path, { ...prev, ...item });
+      }
+      autoPromptItems = [...byPath.values()];
+      patchWorkspace({
+        per_file_params: perFileParamsFromAuto(selectedWorkflow),
+        prompt_mode: 'per-image auto',
+      });
+      submitMsg = `Auto-prompt ${stage} completed for ${result.items.length} image(s) in ${result.elapsed_seconds}s.`;
+    } catch (error) {
+      submitMsg = error instanceof Error ? error.message : String(error);
+    } finally {
+      autoBusy = false;
+    }
+  }
+
+  function applyAutoPrompts(): void {
+    if (!selectedWorkflow) return;
+    const mapping = perFileParamsFromAuto(selectedWorkflow);
+    patchWorkspace({
+      per_file_params: mapping,
+      prompt_mode: 'per-image auto',
+    });
+    submitMsg = `Applied ${Object.keys(mapping).length} per-image prompt override(s).`;
+  }
+
+  function clearAutoPrompts(): void {
+    autoPromptItems = [];
+    patchWorkspace({ per_file_params: {}, prompt_mode: 'manual' });
+    submitMsg = 'Cleared auto prompts.';
   }
 
   function normalizeParam(def: WorkflowParamDef, raw: unknown): unknown {
@@ -360,12 +459,19 @@
       workflow_name: selectedWorkflow.name,
       job_name: activeWs.job_name.trim() || null,
       input_dir: selectedWorkflow.input_type === 'none' ? '' : effectiveInputDir,
+      prompt_mode: activeWs.prompt_mode || 'manual',
       params: buildParams(selectedWorkflow, currentParams),
+      per_file_params: activeWs.prompt_mode === 'manual' ? {} : (activeWs.per_file_params || {}),
       resolution_preset: selectedWorkflow.supports_resolution ? activeWs.resolution_preset || null : null,
       flip_orientation: Boolean(activeWs.flip_orientation),
       move_processed: Boolean(activeWs.move_processed),
       split_by_input: !(activeTab === 'image_gen' && activeWs.image_gen_source_mode === 't2i'),
     };
+
+    if (activeWs.prompt_mode !== 'manual' && !Object.keys((payload.per_file_params as Record<string, unknown>) || {}).length) {
+      submitMsg = 'Prompt mode requires per-image prompt overrides. Generate/apply prompts first.';
+      return;
+    }
 
     submitting = true;
     submitMsg = '';
@@ -478,12 +584,35 @@
           placeholder="optional"
           on:input={(event) => patchWorkspace({ job_name: (event.target as HTMLInputElement).value })}
         />
+
+        <label for="promptMode">Prompt mode</label>
+        <select
+          id="promptMode"
+          value={activeWs?.prompt_mode || 'manual'}
+          on:change={(event) => patchWorkspace({ prompt_mode: (event.target as HTMLSelectElement).value as 'manual' | 'per-image manual' | 'per-image auto' })}
+        >
+          <option value="manual">manual</option>
+          <option value="per-image manual">per-image manual</option>
+          <option value="per-image auto">per-image auto</option>
+        </select>
       </div>
 
       <div class="checks">
         <label><input id="flipOrientation" type="checkbox" checked={Boolean(activeWs?.flip_orientation)} on:change={(event) => patchWorkspace({ flip_orientation: (event.target as HTMLInputElement).checked })} /> Flip orientation</label>
         <label><input id="moveProcessed" type="checkbox" checked={Boolean(activeWs?.move_processed)} on:change={(event) => patchWorkspace({ move_processed: (event.target as HTMLInputElement).checked })} /> Move processed to <code>_processed</code></label>
       </div>
+
+      <DropZone
+        id="dropZone"
+        inputId="fileInput"
+        thumbsId="thumbs"
+        visible={allowImageDrop}
+        label="Drop image files for upload"
+        thumbnails={thumbnailUrls}
+        accept={IMAGE_ACCEPT}
+        disabled={submitting}
+        on:files={(event) => handleDrop(event.detail)}
+      />
 
       <div class="preset-row">
         <label for="promptPresetSelect">Prompt preset</label>
@@ -522,6 +651,55 @@
         <button id="clearDropBtn" disabled={!thumbnailUrls.length} on:click={clearDropped}>Clear dropped set</button>
         <span id="submitMsg">{submitMsg}</span>
       </div>
+
+      <div class="auto-panel">
+        <div class="row">
+          <strong>Auto Prompt (LM Studio)</strong>
+          <button id="apCaptionBtn" disabled={autoBusy || submitting} on:click={() => runAutoPrompt('caption')}>Generate captions</button>
+          <button id="apMotionBtn" disabled={autoBusy || submitting} on:click={() => runAutoPrompt('motion')}>Generate motion</button>
+          <button id="apBothBtn" disabled={autoBusy || submitting} on:click={() => runAutoPrompt('both')}>Run both</button>
+          <button id="apApplyBtn" disabled={autoBusy || submitting} on:click={applyAutoPrompts}>Apply all</button>
+          <button id="apClearBtn" disabled={autoBusy || submitting} on:click={clearAutoPrompts}>Clear</button>
+        </div>
+        <div id="autoPromptRows" class="auto-rows">
+          {#each autoPromptItems as item}
+            <div class="auto-row">
+              <div class="auto-path">{item.path}</div>
+              <label>Caption</label>
+              <textarea
+                value={item.caption || ''}
+                on:input={(event) => {
+                  item.caption = (event.target as HTMLTextAreaElement).value;
+                  autoPromptItems = [...autoPromptItems];
+                }}
+              />
+              {#if item.motion_prompts}
+                {#each Object.entries(item.motion_prompts) as [clip, text]}
+                  <label>{clip}</label>
+                  <textarea
+                    value={text}
+                    on:input={(event) => {
+                      const next = { ...(item.motion_prompts || {}) };
+                      next[clip] = (event.target as HTMLTextAreaElement).value;
+                      item.motion_prompts = next;
+                      autoPromptItems = [...autoPromptItems];
+                    }}
+                  />
+                {/each}
+              {:else}
+                <label>Motion prompt</label>
+                <textarea
+                  value={item.motion_prompt || ''}
+                  on:input={(event) => {
+                    item.motion_prompt = (event.target as HTMLTextAreaElement).value;
+                    autoPromptItems = [...autoPromptItems];
+                  }}
+                />
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </div>
     </div>
 
     <div class="right">
@@ -531,18 +709,6 @@
         values={currentParams}
         disabled={submitting}
         on:change={(event) => patchParam(event.detail.name, event.detail.value)}
-      />
-
-      <DropZone
-        id="dropZone"
-        inputId="fileInput"
-        thumbsId="thumbs"
-        visible={allowImageDrop}
-        label="Drop image files for upload"
-        thumbnails={thumbnailUrls}
-        accept={IMAGE_ACCEPT}
-        disabled={submitting}
-        on:files={(event) => handleDrop(event.detail)}
       />
     </div>
   </div>
@@ -638,6 +804,47 @@
   .primary {
     background: #1d3354;
     border-color: #4f79b8;
+  }
+
+  .auto-panel {
+    display: grid;
+    gap: 8px;
+    border: 1px solid #22324d;
+    border-radius: 10px;
+    padding: 10px;
+    background: #0a1322;
+  }
+
+  .auto-panel .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .auto-rows {
+    display: grid;
+    gap: 8px;
+    max-height: 240px;
+    overflow: auto;
+  }
+
+  .auto-row {
+    border: 1px solid #1e2f4a;
+    border-radius: 8px;
+    padding: 8px;
+    display: grid;
+    gap: 6px;
+  }
+
+  .auto-path {
+    color: #9bb2d3;
+    font-size: 12px;
+    word-break: break-all;
+  }
+
+  .auto-row textarea {
+    min-height: 60px;
   }
 
   button:disabled {

@@ -56,6 +56,9 @@ class Worker:
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
 
+    def is_alive(self) -> bool:
+        return bool(self._thread and self._thread.is_alive())
+
     def stop(self, timeout: float = 10.0) -> None:
         self._stop_event.set()
         if self._thread:
@@ -84,7 +87,9 @@ class Worker:
 
         seen: set[str] = set()
         for prompt in detail["prompts"]:
-            src = prompt["input_file"]
+            src = str(prompt.get("input_file") or "").strip()
+            if not src:
+                continue
             if src in seen:
                 continue
             seen.add(src)
@@ -92,7 +97,7 @@ class Worker:
             if self.db.has_active_prompts_for_input(src, exclude_job_id=job_id):
                 continue
             src_path = Path(src)
-            if not src_path.exists():
+            if not src_path.exists() or not src_path.is_file():
                 continue
             dst = processed_dir / src_path.name
             if dst.exists():
@@ -109,121 +114,126 @@ class Worker:
         self._recover_inflight_prompts_on_startup()
         try:
             while not self._stop_event.is_set():
-                if self.db.is_paused():
-                    time.sleep(1.0)
-                    continue
-
-                if not health_check(self.base_url):
-                    wait_s = self._backoff_steps[min(self._backoff_idx, len(self._backoff_steps) - 1)]
-                    self._backoff_idx = min(self._backoff_idx + 1, len(self._backoff_steps) - 1)
-                    time.sleep(wait_s)
-                    continue
-
-                self._reconcile_running_prompts_once()
-                self._backoff_idx = 0
-                row = self.db.next_pending_prompt()
-                if not row:
-                    time.sleep(1.0)
-                    continue
-
-                prompt_row_id = int(row["id"])
-                job_id = int(row["job_id"])
-                job_detail = self.db.get_job(job_id)
-                if not job_detail:
-                    self.db.update_prompt_status(prompt_row_id, "failed", error_detail="missing parent job")
-                    continue
-
-                prompt_json = json.loads(row["prompt_json"])
-
-                # Cancel-after-current semantics: if cancel was requested before execution
-                # of this pending row, mark it canceled and skip queueing to ComfyUI.
-                if self.db.is_cancel_requested(job_id):
-                    self.db.update_prompt_status(
-                        prompt_row_id,
-                        "canceled",
-                        finished_at=utc_now(),
-                        error_detail="canceled before execution",
-                    )
-                    self.db.update_job_status(job_id)
-                    continue
-
-                self.db.update_prompt_status(prompt_row_id, "running", started_at=utc_now())
-                self.db.update_job_status(job_id)
-
-                log_lines = [f"prompt_row={prompt_row_id} status=running"]
                 try:
-                    comfy_prompt_id = queue_prompt(self.base_url, prompt_json)
-                    log_lines.append(f"queued prompt_id={comfy_prompt_id}")
-                    self.db.update_prompt_status(prompt_row_id, "running", prompt_id=comfy_prompt_id)
+                    if self.db.is_paused():
+                        time.sleep(1.0)
+                        continue
 
-                    ok, status = poll_until_done(self.base_url, comfy_prompt_id)
-                    if ok:
-                        output_paths = get_outputs(self.base_url, comfy_prompt_id)
+                    if not health_check(self.base_url):
+                        wait_s = self._backoff_steps[min(self._backoff_idx, len(self._backoff_steps) - 1)]
+                        self._backoff_idx = min(self._backoff_idx + 1, len(self._backoff_steps) - 1)
+                        time.sleep(wait_s)
+                        continue
+
+                    self._reconcile_running_prompts_once()
+                    self._backoff_idx = 0
+                    row = self.db.next_pending_prompt()
+                    if not row:
+                        time.sleep(1.0)
+                        continue
+
+                    prompt_row_id = int(row["id"])
+                    job_id = int(row["job_id"])
+                    job_detail = self.db.get_job(job_id)
+                    if not job_detail:
+                        self.db.update_prompt_status(prompt_row_id, "failed", error_detail="missing parent job")
+                        continue
+
+                    prompt_json = json.loads(row["prompt_json"])
+
+                    # Cancel-after-current semantics: if cancel was requested before execution
+                    # of this pending row, mark it canceled and skip queueing to ComfyUI.
+                    if self.db.is_cancel_requested(job_id):
                         self.db.update_prompt_status(
                             prompt_row_id,
-                            "succeeded",
+                            "canceled",
                             finished_at=utc_now(),
-                            exit_status=status,
-                            output_paths=json.dumps(output_paths),
+                            error_detail="canceled before execution",
                         )
-                        log_lines.append(f"status=succeeded prompt_id={comfy_prompt_id}")
-                    else:
+                        self.db.update_job_status(job_id)
+                        continue
+
+                    self.db.update_prompt_status(prompt_row_id, "running", started_at=utc_now())
+                    self.db.update_job_status(job_id)
+
+                    log_lines = [f"prompt_row={prompt_row_id} status=running"]
+                    try:
+                        comfy_prompt_id = queue_prompt(self.base_url, prompt_json)
+                        log_lines.append(f"queued prompt_id={comfy_prompt_id}")
+                        self.db.update_prompt_status(prompt_row_id, "running", prompt_id=comfy_prompt_id)
+
+                        ok, status = poll_until_done(self.base_url, comfy_prompt_id)
+                        if ok:
+                            output_paths = get_outputs(self.base_url, comfy_prompt_id)
+                            self.db.update_prompt_status(
+                                prompt_row_id,
+                                "succeeded",
+                                finished_at=utc_now(),
+                                exit_status=status,
+                                output_paths=json.dumps(output_paths),
+                            )
+                            log_lines.append(f"status=succeeded prompt_id={comfy_prompt_id}")
+                        else:
+                            self.db.update_prompt_status(
+                                prompt_row_id,
+                                "failed",
+                                finished_at=utc_now(),
+                                exit_status=status,
+                                error_detail=f"Comfy returned status={status}",
+                            )
+                            log_lines.append(f"status=failed prompt_id={comfy_prompt_id} detail={status}")
+
+                    except ComfyValidationError as exc:
                         self.db.update_prompt_status(
                             prompt_row_id,
                             "failed",
                             finished_at=utc_now(),
-                            exit_status=status,
-                            error_detail=f"Comfy returned status={status}",
+                            exit_status="validation_error",
+                            error_detail=str(exc),
                         )
-                        log_lines.append(f"status=failed prompt_id={comfy_prompt_id} detail={status}")
+                        log_lines.append(f"status=failed validation_error={exc}")
+                    except ComfyUnreachableError as exc:
+                        self.db.update_prompt_status(
+                            prompt_row_id,
+                            "failed",
+                            finished_at=utc_now(),
+                            exit_status="unreachable",
+                            error_detail=str(exc),
+                        )
+                        log_lines.append(f"status=failed unreachable={exc}")
+                    except ComfyError as exc:
+                        self.db.update_prompt_status(
+                            prompt_row_id,
+                            "failed",
+                            finished_at=utc_now(),
+                            exit_status="error",
+                            error_detail=str(exc),
+                        )
+                        log_lines.append(f"status=failed error={exc}")
+                    except Exception as exc:
+                        self.db.update_prompt_status(
+                            prompt_row_id,
+                            "failed",
+                            finished_at=utc_now(),
+                            exit_status="exception",
+                            error_detail=str(exc),
+                        )
+                        log_lines.append(f"status=failed exception={exc}")
 
-                except ComfyValidationError as exc:
-                    self.db.update_prompt_status(
-                        prompt_row_id,
-                        "failed",
-                        finished_at=utc_now(),
-                        exit_status="validation_error",
-                        error_detail=str(exc),
-                    )
-                    log_lines.append(f"status=failed validation_error={exc}")
-                except ComfyUnreachableError as exc:
-                    self.db.update_prompt_status(
-                        prompt_row_id,
-                        "failed",
-                        finished_at=utc_now(),
-                        exit_status="unreachable",
-                        error_detail=str(exc),
-                    )
-                    log_lines.append(f"status=failed unreachable={exc}")
-                except ComfyError as exc:
-                    self.db.update_prompt_status(
-                        prompt_row_id,
-                        "failed",
-                        finished_at=utc_now(),
-                        exit_status="error",
-                        error_detail=str(exc),
-                    )
-                    log_lines.append(f"status=failed error={exc}")
-                except Exception as exc:
-                    self.db.update_prompt_status(
-                        prompt_row_id,
-                        "failed",
-                        finished_at=utc_now(),
-                        exit_status="exception",
-                        error_detail=str(exc),
-                    )
-                    log_lines.append(f"status=failed exception={exc}")
+                    log_path = self._write_log(job_id, prompt_row_id, log_lines)
+                    self.db.conn.execute("UPDATE jobs SET log_path=? WHERE id=?", (log_path, job_id))
+                    self.db.conn.commit()
 
-                log_path = self._write_log(job_id, prompt_row_id, log_lines)
-                self.db.conn.execute("UPDATE jobs SET log_path=? WHERE id=?", (log_path, job_id))
-                self.db.conn.commit()
+                    if self.db.is_cancel_requested(job_id):
+                        self.db.cancel_pending_prompts(job_id)
 
-                if self.db.is_cancel_requested(job_id):
-                    self.db.cancel_pending_prompts(job_id)
-
-                job_status = self.db.update_job_status(job_id)
-                if job_status == "succeeded":
-                    self._move_processed(job_id)
+                    job_status = self.db.update_job_status(job_id)
+                    if job_status == "succeeded":
+                        self._move_processed(job_id)
+                except Exception:
+                    # Prevent a single unexpected loop error from permanently killing the worker thread.
+                    time.sleep(1.0)
+                    continue
 
         finally:
             with self._state_lock:

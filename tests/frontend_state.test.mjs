@@ -112,14 +112,6 @@ function buildApi(options = {}) {
     if (method === 'POST' && p === '/api/pick-image') {
       return mkResponse(200, { path: '/picked/single.png' });
     }
-    if (method === 'POST' && p === '/api/jobs/single') {
-      const img = String(bodyObj?.input_image || '').toLowerCase();
-      if (img && !['.png', '.jpg', '.jpeg', '.webp', '.bmp'].some((ext) => img.endsWith(ext))) {
-        return mkResponse(400, { detail: 'unsupported input image extension: .txt' });
-      }
-      state.submits.push({ endpoint: p, payload: bodyObj });
-      return mkResponse(201, { job_id: 1, prompt_count: 1, input_dir: '/home/cobra/ComfyUI/input' });
-    }
     if (method === 'POST' && p === '/api/jobs') {
       state.submits.push({ endpoint: p, payload: bodyObj });
       return mkResponse(201, { job_id: 1, prompt_count: 1, input_dir: '/home/cobra/ComfyUI/input' });
@@ -247,13 +239,6 @@ test('persists and restores global + per-workflow state across reload', async ()
   inputDir.value = '/tmp/my_batch';
   dispatch(inputDir, 'input');
 
-  const tabSingle = doc1.getElementById('tabSingle');
-  dispatch(tabSingle, 'click');
-
-  const inputImage = doc1.getElementById('inputImage');
-  inputImage.value = '/tmp/one.png';
-  dispatch(inputImage, 'input');
-
   const saved = dom1.window.localStorage.getItem(STATE_KEY);
   assert.ok(saved && saved.includes('wf1 prompt'));
   dom1.window.close();
@@ -265,7 +250,6 @@ test('persists and restores global + per-workflow state across reload', async ()
   assert.equal(doc2.getElementById('resolutionPreset').value, '768x1360');
   assert.equal(doc2.getElementById('flipOrientation').checked, true);
   assert.equal(doc2.getElementById('inputDir').value, '/tmp/my_batch');
-  assert.equal(doc2.getElementById('inputImage').value, '/tmp/one.png');
   assert.equal(doc2.querySelector('[data-param-name="positive_prompt"]').value, 'wf1 prompt');
 
   dom2.window.close();
@@ -296,7 +280,6 @@ test('stale persisted numeric and boolean values are coerced/clamped', async () 
       resolution_preset: '640x1136',
       flip_orientation: false,
       input_dir: '/tmp/demo',
-      single_image: '',
       active_tab: 'batch',
     },
     workflow_params: {
@@ -331,45 +314,6 @@ test('reset button clears saved options', async () => {
   const state = JSON.parse(dom.window.localStorage.getItem(STATE_KEY));
   assert.equal(state.global.input_dir, '');
   assert.equal(doc.getElementById('inputDir').value, '');
-
-  dom.window.close();
-});
-
-test('single tab prevents empty submit and maps payload to /api/jobs/single', async () => {
-  const { dom, apiState } = await createDom();
-  const doc = dom.window.document;
-
-  dispatch(doc.getElementById('tabSingle'), 'click');
-  doc.getElementById('inputImage').value = '';
-  dispatch(doc.getElementById('submitBtn'), 'click');
-  await wait(10);
-  assert.match(doc.getElementById('submitMsg').textContent, /requires one input image/i);
-  assert.equal(apiState.submits.length, 0);
-
-  doc.getElementById('inputImage').value = '/tmp/one.png';
-  dispatch(doc.getElementById('inputImage'), 'input');
-  dispatch(doc.getElementById('submitBtn'), 'click');
-  await wait(10);
-
-  assert.equal(apiState.submits.length, 1);
-  assert.equal(apiState.submits[0].endpoint, '/api/jobs/single');
-  assert.equal(apiState.submits[0].payload.input_image, '/tmp/one.png');
-
-  dom.window.close();
-});
-
-test('single tab invalid image type surfaces validation error', async () => {
-  const { dom, apiState } = await createDom();
-  const doc = dom.window.document;
-
-  dispatch(doc.getElementById('tabSingle'), 'click');
-  doc.getElementById('inputImage').value = '/tmp/not_allowed.txt';
-  dispatch(doc.getElementById('inputImage'), 'input');
-  dispatch(doc.getElementById('submitBtn'), 'click');
-  await wait(10);
-
-  assert.match(doc.getElementById('submitMsg').textContent, /unsupported input image extension/i);
-  assert.equal(apiState.submits.length, 0);
 
   dom.window.close();
 });
@@ -504,6 +448,17 @@ test('workflow dropdown is filtered by mode category per tab', async () => {
       parameters: { positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null } },
     },
     {
+      name: 'image-gen-flux-t2i',
+      display_name: 'Image Gen T2I',
+      group: 'Image',
+      category: 'image_gen',
+      description: 'image gen',
+      input_type: 'none',
+      input_extensions: [],
+      supports_resolution: false,
+      parameters: { positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null } },
+    },
+    {
       name: 'upscale-interpolate-only',
       display_name: 'Video Upscale',
       group: 'Utilities',
@@ -543,6 +498,172 @@ test('workflow dropdown is filtered by mode category per tab', async () => {
   const optionsImageUpscale = [...doc.getElementById('workflowSelect').options].map((o) => o.value);
   assert.deepEqual(optionsImageUpscale, ['upscale-images-i2v']);
 
+  dispatch(doc.getElementById('tabImageGen'), 'click');
+  await wait(10);
+  const optionsImageGen = [...doc.getElementById('workflowSelect').options].map((o) => o.value);
+  assert.deepEqual(optionsImageGen, ['image-gen-flux-t2i']);
+
+  dom.window.close();
+});
+
+test('batch tab shows batch drop zone and hides upscale-images drop zone', async () => {
+  const { dom } = await createDom();
+  const doc = dom.window.document;
+  await wait(10);
+
+  const batchZone = doc.getElementById('batchDropZone');
+  const upscaleZone = doc.getElementById('upscaleImagesDropZone');
+  const imageGenZone = doc.getElementById('imageGenDropZone');
+  assert.ok(batchZone);
+  assert.ok(upscaleZone);
+  assert.ok(imageGenZone);
+
+  dispatch(doc.getElementById('tabBatch'), 'click');
+  await wait(10);
+  assert.equal(batchZone.classList.contains('hidden'), false);
+  assert.equal(upscaleZone.classList.contains('hidden'), true);
+  assert.equal(imageGenZone.classList.contains('hidden'), true);
+
+  dispatch(doc.getElementById('tabUpscaleImages'), 'click');
+  await wait(10);
+  assert.equal(batchZone.classList.contains('hidden'), true);
+  assert.equal(upscaleZone.classList.contains('hidden'), false);
+  assert.equal(imageGenZone.classList.contains('hidden'), true);
+
+  dispatch(doc.getElementById('tabImageGen'), 'click');
+  await wait(10);
+  assert.equal(batchZone.classList.contains('hidden'), true);
+  assert.equal(upscaleZone.classList.contains('hidden'), true);
+  assert.equal(imageGenZone.classList.contains('hidden'), true);
+  doc.getElementById('imageGenSourceMode').value = 'i2i';
+  dispatch(doc.getElementById('imageGenSourceMode'), 'change');
+  await wait(10);
+  assert.equal(imageGenZone.classList.contains('hidden'), false);
+
+  dom.window.close();
+});
+
+test('workspace tabs isolate per-workflow prompt values', async () => {
+  const { dom } = await createDom();
+  const doc = dom.window.document;
+  await wait(10);
+
+  const wf = doc.getElementById('workflowSelect');
+  wf.value = 'wan-context-lite-2stage';
+  dispatch(wf, 'change');
+  await wait(10);
+  const p1 = doc.querySelector('[data-param-name="positive_prompt"]');
+  p1.value = 'workspace one prompt';
+  dispatch(p1, 'input');
+
+  dispatch(doc.getElementById('newWorkspaceBtn'), 'click');
+  await wait(10);
+
+  const p2 = doc.querySelector('[data-param-name="positive_prompt"]');
+  p2.value = 'workspace two prompt';
+  dispatch(p2, 'input');
+
+  const tabs = [...doc.querySelectorAll('#workspaceTabs [data-workspace-id]')];
+  assert.equal(tabs.length >= 2, true);
+  dispatch(tabs[0], 'click');
+  await wait(20);
+
+  const pBack = doc.querySelector('[data-param-name="positive_prompt"]');
+  assert.equal(pBack.value, 'workspace one prompt');
+
+  const tabsAfter = [...doc.querySelectorAll('#workspaceTabs [data-workspace-id]')];
+  dispatch(tabsAfter[1], 'click');
+  await wait(20);
+  const pTwo = doc.querySelector('[data-param-name="positive_prompt"]');
+  assert.equal(pTwo.value, 'workspace two prompt');
+
+  dom.window.close();
+});
+
+test('workspace tabs persist across reload', async () => {
+  const { dom: dom1 } = await createDom();
+  const doc1 = dom1.window.document;
+  await wait(10);
+
+  const wf1 = doc1.getElementById('workflowSelect');
+  wf1.value = 'wan-context-lite-2stage';
+  dispatch(wf1, 'change');
+  await wait(10);
+  const p1 = doc1.querySelector('[data-param-name="positive_prompt"]');
+  p1.value = 'persist ws1';
+  dispatch(p1, 'input');
+
+  dispatch(doc1.getElementById('newWorkspaceBtn'), 'click');
+  await wait(10);
+  const p2 = doc1.querySelector('[data-param-name="positive_prompt"]');
+  p2.value = 'persist ws2';
+  dispatch(p2, 'input');
+
+  const saved = dom1.window.localStorage.getItem(STATE_KEY);
+  dom1.window.close();
+
+  const { dom: dom2 } = await createDom({ seedState: saved });
+  const doc2 = dom2.window.document;
+  await wait(20);
+  const tabs = [...doc2.querySelectorAll('#workspaceTabs [data-workspace-id]')];
+  assert.equal(tabs.length >= 2, true);
+
+  dispatch(tabs[0], 'click');
+  await wait(20);
+  assert.equal(doc2.querySelector('[data-param-name="positive_prompt"]').value, 'persist ws1');
+
+  const tabsAfter = [...doc2.querySelectorAll('#workspaceTabs [data-workspace-id]')];
+  dispatch(tabsAfter[1], 'click');
+  await wait(20);
+  assert.equal(doc2.querySelector('[data-param-name="positive_prompt"]').value, 'persist ws2');
+
+  dom2.window.close();
+});
+
+test('extra lora slot disable toggle disables high/low names and strengths', async () => {
+  const wfExtra = {
+    name: 'wan-context-lite-2stage',
+    display_name: 'WAN Single',
+    group: 'WAN V2',
+    category: 'video_gen',
+    description: 'single',
+    input_type: 'image',
+    input_extensions: ['.png', '.jpg'],
+    supports_resolution: true,
+    parameters: {
+      positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null },
+      extra_lora2_enabled: { label: 'Enable Extra LoRA 2', type: 'bool', default: false, min: null, max: null },
+      extra_lora2_high_name: { label: 'Extra LoRA 2 (high-noise)', type: 'text', default: '', min: null, max: null },
+      extra_lora2_low_name: { label: 'Extra LoRA 2 (low-noise)', type: 'text', default: '', min: null, max: null },
+      extra_lora2_strength_high: { label: 'Extra LoRA 2 strength (high-noise)', type: 'float', default: 0.8, min: 0, max: 2 },
+      extra_lora2_strength_low: { label: 'Extra LoRA 2 strength (low-noise)', type: 'float', default: 0.8, min: 0, max: 2 },
+    },
+  };
+  const { dom } = await createDom({ workflows: [wfExtra] });
+  const doc = dom.window.document;
+  await wait(20);
+
+  const enabled = doc.querySelector('[data-param-name="extra_lora2_enabled"]');
+  const high = doc.querySelector('[data-param-name="extra_lora2_high_name"]');
+  const low = doc.querySelector('[data-param-name="extra_lora2_low_name"]');
+  const sh = doc.querySelector('[data-param-name="extra_lora2_strength_high"]');
+  const sl = doc.querySelector('[data-param-name="extra_lora2_strength_low"]');
+  assert.ok(enabled && high && low && sh && sl);
+
+  assert.equal(enabled.checked, false);
+  assert.equal(high.disabled, true);
+  assert.equal(low.disabled, true);
+  assert.equal(sh.disabled, true);
+  assert.equal(sl.disabled, true);
+
+  enabled.checked = true;
+  dispatch(enabled, 'change');
+  await wait(10);
+  assert.equal(high.disabled, false);
+  assert.equal(low.disabled, false);
+  assert.equal(sh.disabled, false);
+  assert.equal(sl.disabled, false);
+
   dom.window.close();
 });
 
@@ -557,6 +678,17 @@ test('prompt presets are requested with mode scope per active tab', async () => 
       input_type: 'image',
       input_extensions: ['.png'],
       supports_resolution: true,
+      parameters: { positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null } },
+    },
+    {
+      name: 'image-gen-flux-t2i',
+      display_name: 'Image Gen T2I',
+      group: 'Image',
+      category: 'image_gen',
+      description: 'image gen',
+      input_type: 'none',
+      input_extensions: [],
+      supports_resolution: false,
       parameters: { positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null } },
     },
     {
@@ -590,12 +722,15 @@ test('prompt presets are requested with mode scope per active tab', async () => 
   await wait(10);
   dispatch(doc.getElementById('tabUpscaleImages'), 'click');
   await wait(10);
+  dispatch(doc.getElementById('tabImageGen'), 'click');
+  await wait(10);
   dispatch(doc.getElementById('tabBatch'), 'click');
   await wait(10);
 
   const presetGets = apiState.requests.filter((r) => r.method === 'GET' && r.path === '/api/prompt-presets');
   const queryBlob = presetGets.map((r) => String(r.query || '')).join('|');
   assert.match(queryBlob, /mode=video_gen/);
+  assert.match(queryBlob, /mode=image_gen/);
   assert.match(queryBlob, /mode=video_upscale/);
   assert.match(queryBlob, /mode=image_upscale/);
 
@@ -603,7 +738,21 @@ test('prompt presets are requested with mode scope per active tab', async () => 
 });
 
 test('submit payload job_name is auto-prefixed by active mode', async () => {
-  const { dom, apiState } = await createDom();
+  const workflows = [
+    ...defaultWorkflows,
+    {
+      name: 'image-gen-flux-t2i',
+      display_name: 'Image Gen T2I',
+      group: 'Image',
+      category: 'image_gen',
+      description: 'image gen',
+      input_type: 'none',
+      input_extensions: [],
+      supports_resolution: false,
+      parameters: { positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null } },
+    },
+  ];
+  const { dom, apiState } = await createDom({ workflows });
   const doc = dom.window.document;
 
   dispatch(doc.getElementById('tabBatch'), 'click');
@@ -615,15 +764,112 @@ test('submit payload job_name is auto-prefixed by active mode', async () => {
   await wait(10);
   assert.equal(apiState.submits[0].payload.job_name, 'batch foo');
 
-  dispatch(doc.getElementById('tabSingle'), 'click');
-  doc.getElementById('inputImage').value = '/tmp/one.png';
-  dispatch(doc.getElementById('inputImage'), 'input');
+  dispatch(doc.getElementById('tabUpscale'), 'click');
+  doc.getElementById('inputDir').value = '/tmp/upscale';
+  dispatch(doc.getElementById('inputDir'), 'input');
   doc.getElementById('jobName').value = 'bar';
   dispatch(doc.getElementById('jobName'), 'input');
   dispatch(doc.getElementById('submitBtn'), 'click');
   await wait(10);
-  assert.equal(apiState.submits[1].payload.job_name, 'single bar');
+  assert.equal(apiState.submits[1].payload.job_name, 'upscale bar');
 
+  dispatch(doc.getElementById('tabImageGen'), 'click');
+  doc.getElementById('imageGenSourceMode').value = 't2i';
+  dispatch(doc.getElementById('imageGenSourceMode'), 'change');
+  doc.getElementById('jobName').value = 'baz';
+  dispatch(doc.getElementById('jobName'), 'input');
+  dispatch(doc.getElementById('submitBtn'), 'click');
+  await wait(10);
+  assert.equal(apiState.submits[2].payload.job_name, 'image_gen baz');
+
+  dom.window.close();
+});
+
+test('image gen t2i submit does not require input dir and disables split_by_input', async () => {
+  const workflows = [
+    {
+      name: 'wan-context-2stage',
+      display_name: 'WAN Gen',
+      group: 'WAN V2',
+      category: 'video_gen',
+      description: 'video gen',
+      input_type: 'image',
+      input_extensions: ['.png'],
+      supports_resolution: true,
+      parameters: { positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null } },
+    },
+    {
+      name: 'image-gen-flux-t2i',
+      display_name: 'Image Gen T2I',
+      group: 'Image',
+      category: 'image_gen',
+      description: 'image gen',
+      input_type: 'none',
+      input_extensions: [],
+      supports_resolution: false,
+      parameters: { positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null } },
+    },
+  ];
+  const { dom, apiState } = await createDom({ workflows });
+  const doc = dom.window.document;
+  dispatch(doc.getElementById('tabImageGen'), 'click');
+  await wait(10);
+  doc.getElementById('imageGenSourceMode').value = 't2i';
+  dispatch(doc.getElementById('imageGenSourceMode'), 'change');
+  doc.getElementById('inputDir').value = '/tmp/ignored';
+  dispatch(doc.getElementById('inputDir'), 'input');
+  dispatch(doc.getElementById('submitBtn'), 'click');
+  await wait(10);
+  assert.equal(apiState.submits.length, 1);
+  assert.equal(apiState.submits[0].endpoint, '/api/jobs');
+  assert.equal(apiState.submits[0].payload.input_dir, '');
+  assert.equal(apiState.submits[0].payload.split_by_input, false);
+  dom.window.close();
+});
+
+test('image gen image-input workflow forces i2i and blocks t2i submit', async () => {
+  const workflows = [
+    {
+      name: 'wan-context-2stage',
+      display_name: 'WAN Gen',
+      group: 'WAN V2',
+      category: 'video_gen',
+      description: 'video gen',
+      input_type: 'image',
+      input_extensions: ['.png'],
+      supports_resolution: true,
+      parameters: { positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null } },
+    },
+    {
+      name: 'image-gen-flux-img2img',
+      display_name: 'Image Gen I2I',
+      group: 'Image',
+      category: 'image_gen',
+      description: 'image gen i2i',
+      input_type: 'image',
+      input_extensions: ['.png'],
+      supports_resolution: false,
+      parameters: { positive_prompt: { label: 'Positive', type: 'text', default: '', min: null, max: null } },
+    },
+  ];
+  const { dom, apiState } = await createDom({ workflows });
+  const doc = dom.window.document;
+  dispatch(doc.getElementById('tabImageGen'), 'click');
+  await wait(10);
+
+  const sourceSel = doc.getElementById('imageGenSourceMode');
+  assert.equal(sourceSel.value, 'i2i');
+  assert.equal(sourceSel.querySelector('option[value="t2i"]').disabled, true);
+
+  sourceSel.value = 't2i';
+  dispatch(sourceSel, 'change');
+  await wait(10);
+  assert.equal(sourceSel.value, 'i2i');
+  dispatch(doc.getElementById('submitBtn'), 'click');
+  await wait(10);
+
+  assert.equal(apiState.submits.length, 1);
+  assert.equal(apiState.submits[0].payload.split_by_input, true);
   dom.window.close();
 });
 
@@ -650,7 +896,6 @@ test('workflow reload with changed parameter schema does not break restore logic
       resolution_preset: '640x1136',
       flip_orientation: false,
       input_dir: '/tmp/demo',
-      single_image: '',
       active_tab: 'batch',
     },
     workflow_params: {
@@ -677,9 +922,9 @@ test('workflow reload with changed parameter schema does not break restore logic
 test('submit after reload uses restored settings', async () => {
   const { dom: first } = await createDom();
   const firstDoc = first.window.document;
-  dispatch(firstDoc.getElementById('tabSingle'), 'click');
-  firstDoc.getElementById('inputImage').value = '/tmp/reload.png';
-  dispatch(firstDoc.getElementById('inputImage'), 'input');
+  dispatch(firstDoc.getElementById('tabBatch'), 'click');
+  firstDoc.getElementById('inputDir').value = '/tmp/reload_batch';
+  dispatch(firstDoc.getElementById('inputDir'), 'input');
 
   const saved = first.window.localStorage.getItem(STATE_KEY);
   first.window.close();
@@ -690,8 +935,8 @@ test('submit after reload uses restored settings', async () => {
   await wait(10);
 
   assert.equal(apiState.submits.length, 1);
-  assert.equal(apiState.submits[0].endpoint, '/api/jobs/single');
-  assert.equal(apiState.submits[0].payload.input_image, '/tmp/reload.png');
+  assert.equal(apiState.submits[0].endpoint, '/api/jobs');
+  assert.equal(apiState.submits[0].payload.input_dir, '/tmp/reload_batch');
 
   second.window.close();
 });
@@ -772,6 +1017,170 @@ test('prompt details render prompt row id, comfy prompt id, and collapsible JSON
 
   const pre = body.querySelector('pre');
   assert.ok(pre.textContent.includes('"node"'));
+
+  dom.window.close();
+});
+
+test('expanded job details persist after queue re-render', async () => {
+  const { dom } = await createDom({
+    jobsList: [
+      {
+        id: 78,
+        workflow_name: 'wan-context-lite-2stage',
+        input_dir: '/tmp/in',
+        status: 'running',
+        created_at: '2026-01-01T00:00:00+00:00',
+        finished_at: null,
+        prompt_count: 1,
+        job_name: 'persist-me',
+      },
+    ],
+    jobDetails: {
+      '78': {
+        job: { id: 78, status: 'running' },
+        prompts: [
+          {
+            id: 911,
+            status: 'running',
+            input_file: '/tmp/in/b.png',
+            prompt_id: 'comfy-789',
+            prompt_json: JSON.stringify({ node: { inputs: { x: 2 } } }),
+            output_paths: '[]',
+            error_detail: null,
+          },
+        ],
+      },
+    },
+  });
+
+  const doc = dom.window.document;
+  await wait(10);
+
+  let details = doc.querySelector('details[data-job-detail="78"]');
+  assert.ok(details);
+  details.open = true;
+  dispatch(details, 'toggle');
+  await wait(10);
+
+  const search = doc.getElementById('queueSearch');
+  search.value = 'persist-me';
+  dispatch(search, 'input');
+  await wait(10);
+
+  details = doc.querySelector('details[data-job-detail="78"]');
+  assert.ok(details);
+  assert.equal(details.open, true);
+
+  dom.window.close();
+});
+
+test('queue defaults to actionable sort with running jobs first', async () => {
+  const { dom } = await createDom({
+    jobsList: [
+      {
+        id: 11,
+        workflow_name: 'wan-context-lite-2stage',
+        input_dir: '/tmp/in',
+        status: 'pending',
+        created_at: '2026-01-02T00:00:00+00:00',
+        finished_at: null,
+        prompt_count: 1,
+      },
+      {
+        id: 12,
+        workflow_name: 'wan-context-lite-2stage',
+        input_dir: '/tmp/in',
+        status: 'running',
+        created_at: '2026-01-01T00:00:00+00:00',
+        finished_at: null,
+        prompt_count: 1,
+      },
+    ],
+  });
+
+  const doc = dom.window.document;
+  await wait(10);
+
+  const rows = [...doc.querySelectorAll('#jobsTable tbody tr[data-job-row]')];
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].getAttribute('data-job-row'), '12');
+  assert.equal(rows[1].getAttribute('data-job-row'), '11');
+
+  dom.window.close();
+});
+
+test('queue status chips and search filter visible jobs', async () => {
+  const { dom } = await createDom({
+    jobsList: [
+      {
+        id: 21,
+        workflow_name: 'wan-context-lite-2stage',
+        input_dir: '/tmp/alpha',
+        status: 'failed',
+        created_at: '2026-01-01T00:00:00+00:00',
+        finished_at: null,
+        prompt_count: 1,
+        job_name: 'alpha-fail',
+      },
+      {
+        id: 22,
+        workflow_name: 'wan-context-lite-2stage',
+        input_dir: '/tmp/bravo',
+        status: 'pending',
+        created_at: '2026-01-01T00:00:00+00:00',
+        finished_at: null,
+        prompt_count: 1,
+        job_name: 'bravo-pending',
+      },
+    ],
+  });
+  const doc = dom.window.document;
+  await wait(10);
+
+  const chips = [...doc.querySelectorAll('#queueStatusBar .q-chip')];
+  const failedChip = chips.find((x) => /^failed\s+/i.test(String(x.textContent || '')));
+  assert.ok(failedChip);
+  dispatch(failedChip, 'click');
+  await wait(10);
+
+  let rows = [...doc.querySelectorAll('#jobsTable tbody tr[data-job-row]')];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].getAttribute('data-job-row'), '21');
+
+  const search = doc.getElementById('queueSearch');
+  search.value = 'no-match';
+  dispatch(search, 'input');
+  await wait(10);
+  rows = [...doc.querySelectorAll('#jobsTable tbody tr[data-job-row]')];
+  assert.equal(rows.length, 0);
+
+  dom.window.close();
+});
+
+test('cancel button requires confirmation before API call', async () => {
+  const { dom, apiState } = await createDom({
+    confirmResponses: [false],
+    jobsList: [
+      {
+        id: 31,
+        workflow_name: 'wan-context-lite-2stage',
+        input_dir: '/tmp/in',
+        status: 'running',
+        created_at: '2026-01-01T00:00:00+00:00',
+        finished_at: null,
+        prompt_count: 1,
+      },
+    ],
+  });
+  const doc = dom.window.document;
+  await wait(10);
+  const cancelBtn = doc.querySelector('[data-cancel="31"]');
+  assert.ok(cancelBtn);
+  dispatch(cancelBtn, 'click');
+  await wait(10);
+
+  const cancelReq = apiState.requests.find((r) => r.method === 'POST' && r.path.endsWith('/31/cancel'));
+  assert.equal(cancelReq, undefined);
 
   dom.window.close();
 });

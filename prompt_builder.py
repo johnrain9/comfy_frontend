@@ -244,22 +244,95 @@ def _apply_param_overrides(prompt: dict[str, Any], workflow_def: WorkflowDef, re
             inputs = node.setdefault("inputs", {})
             _set_candidate_field(inputs, pdef.field, pdef.fields, value)
 
+    def _extra_slot_active(slot_idx: int) -> bool:
+        key_base = "extra_lora" if slot_idx == 1 else f"extra_lora{slot_idx}"
+        enabled = bool(resolved_params.get(f"{key_base}_enabled", False))
+        if not enabled:
+            return False
+        high = str(resolved_params.get(f"{key_base}_high_name", "") or "").strip()
+        low = str(resolved_params.get(f"{key_base}_low_name", "") or "").strip()
+        # Slot is active only when both high/low names are explicitly provided.
+        return bool(high and low)
+
+    # Explicit enable + name requirements for extra LoRA slots take precedence over strength values.
+    # If inactive, force slot strength to 0 so users do not have to rely on manual zeroing.
+    for idx in (1, 2, 3):
+        key_base = "extra_lora" if idx == 1 else f"extra_lora{idx}"
+        active = _extra_slot_active(idx)
+        if active:
+            continue
+        strength_keys = [
+            f"{key_base}_strength_high",
+            f"{key_base}_strength_low",
+            f"{key_base}_strength",  # backward compatibility
+        ]
+        for strength_key in strength_keys:
+            strength_def = workflow_def.parameters.get(strength_key)
+            if not strength_def or not strength_def.nodes:
+                continue
+            for nid in strength_def.nodes:
+                node = prompt.get(nid)
+                if not isinstance(node, dict):
+                    continue
+                inputs = node.setdefault("inputs", {})
+                _set_candidate_field(inputs, strength_def.field, strength_def.fields, 0.0)
+
+    # For single-pass WAN workflow, bypass unused extra LoRA nodes to preserve original
+    # base-model path when extras are not enabled.
+    if workflow_def.name == "wan-context-lite-2stage":
+        e1 = _extra_slot_active(1)
+        e2 = _extra_slot_active(2)
+
+        def _set_model_input(node_id: str, src_id: str) -> None:
+            node = prompt.get(node_id)
+            if not isinstance(node, dict):
+                return
+            inputs = node.setdefault("inputs", {})
+            inputs["model"] = [src_id, 0]
+
+        # Slot 1 always chains from base 4-step LoRA nodes.
+        _set_model_input("201", "101")
+        _set_model_input("202", "102")
+
+        # Slot 2 either chains from slot 1 (when enabled) or directly from base nodes.
+        if e1:
+            _set_model_input("211", "201")
+            _set_model_input("212", "202")
+        else:
+            _set_model_input("211", "101")
+            _set_model_input("212", "102")
+
+        # Sampler model source should follow highest enabled slot; otherwise base path.
+        if e2:
+            _set_model_input("104", "211")  # high-noise branch
+            _set_model_input("103", "212")  # low-noise branch
+        elif e1:
+            _set_model_input("104", "201")
+            _set_model_input("103", "202")
+        else:
+            _set_model_input("104", "101")
+            _set_model_input("103", "102")
+
 
 
 def build_prompts(
     workflow_def: WorkflowDef,
     input_files: list[str | Path],
     params: dict[str, Any] | None,
+    per_file_params: dict[str, dict[str, Any]] | None = None,
     comfy_input_dir: str | Path | None = None,
     resolution: tuple[int, int] | None = None,
     flip_orientation: bool = False,
 ) -> list[PromptSpec]:
-    if not input_files:
-        return []
-
     comfy_input = Path(comfy_input_dir).expanduser().resolve() if comfy_input_dir else None
-    paths = [Path(p).expanduser().resolve() for p in input_files]
+    paths: list[Path | None]
+    if input_files:
+        paths = [Path(p).expanduser().resolve() for p in input_files]
+    else:
+        # Input-less workflows (e.g. T2I) still need one prompt per try.
+        paths = [None]
     resolved = resolve_params(workflow_def, params)
+    per_file_params = per_file_params or {}
 
     tries = int(resolved.get("tries", 1))
     randomize = bool(resolved.get("randomize_seed", False) or tries > 1)
@@ -268,11 +341,21 @@ def build_prompts(
 
     specs: list[PromptSpec] = []
     for file_path in paths:
-        rel_input = _resolve_for_comfy_input(file_path, comfy_input)
+        rel_input = _resolve_for_comfy_input(file_path, comfy_input) if file_path is not None else None
+        effective = resolved
+        if file_path is not None:
+            override_raw = per_file_params.get(str(file_path))
+            if override_raw is None:
+                override_raw = per_file_params.get(file_path.name)
+            if override_raw is not None:
+                merged = dict(resolved)
+                merged.update(dict(override_raw))
+                effective = resolve_params(workflow_def, merged)
         for attempt in range(1, tries + 1):
             prompt = copy.deepcopy(workflow_def.template_prompt)
-            _apply_input_binding(prompt, workflow_def, rel_input)
-            _apply_param_overrides(prompt, workflow_def, resolved)
+            if rel_input is not None:
+                _apply_input_binding(prompt, workflow_def, rel_input)
+            _apply_param_overrides(prompt, workflow_def, effective)
             _apply_switch_states(prompt, workflow_def)
             _normalize_context_schedule_values(prompt)
             if resolution is not None:
@@ -280,13 +363,17 @@ def build_prompts(
             if flip:
                 _flip_orientation(prompt)
 
-            stem = file_path.stem if tries == 1 else f"{file_path.stem}_try{attempt:02d}"
+            if file_path is None:
+                stem_base = "prompt"
+            else:
+                stem_base = file_path.stem
+            stem = stem_base if tries == 1 else f"{stem_base}_try{attempt:02d}"
             out_prefix = _set_output_prefix(prompt, workflow_def, output_prefix_base, stem)
             seed_used = _set_seed(prompt, workflow_def, randomize)
 
             specs.append(
                 PromptSpec(
-                    input_file=str(file_path),
+                    input_file=str(file_path) if file_path is not None else "",
                     prompt_json=prompt,
                     seed_used=seed_used,
                     output_prefix=out_prefix,

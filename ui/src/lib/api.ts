@@ -1,5 +1,6 @@
 import type {
   HealthResponse,
+  AutoPromptResponse,
   InputDirDefaultResponse,
   JobDetail,
   JobListItem,
@@ -267,4 +268,30 @@ export const api = {
       options,
     );
   },
+  autoPromptCapability: (lmstudioUrl?: string, options: RequestOptions = {}) =>
+    jfetch<Record<string, unknown>>(
+      `/api/auto-prompt/capability${lmstudioUrl ? `?lmstudio_url=${encodeURIComponent(lmstudioUrl)}` : ''}`,
+      {},
+      options,
+    ),
+  autoPrompt: (
+    payload: {
+      image_paths: string[];
+      workflow_name: string;
+      stage: 'caption' | 'motion' | 'both';
+      captions?: Record<string, string>;
+      system_prompt_override?: string | null;
+      lmstudio_url?: string | null;
+    },
+    options: RequestOptions = {},
+  ) =>
+    jfetch<AutoPromptResponse>(
+      '/api/auto-prompt',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+      options,
+    ),
 };

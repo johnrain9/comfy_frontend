@@ -219,8 +219,8 @@ def load_one(path: Path) -> WorkflowDef:
         raise _err(path, "category", "must be a string")
 
     input_type = raw["input_type"]
-    if input_type not in {"image", "video"}:
-        raise _err(path, "input_type", "must be 'image' or 'video'")
+    if input_type not in {"image", "video", "none"}:
+        raise _err(path, "input_type", "must be 'image', 'video', or 'none'")
 
     input_extensions = raw["input_extensions"]
     if not isinstance(input_extensions, list) or not input_extensions:

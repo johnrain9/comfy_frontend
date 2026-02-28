@@ -2,7 +2,7 @@ name: wan-context-2stage
 display_name: "WAN ContextWindow2 Refine (2-pass, 81f)"
 group: "WAN V2"
 category: "video_gen"
-description: "ContextWindow2 workflow with first-pass + refine-pass generation + optional extra LoRA"
+description: "ContextWindow2 workflow with first-pass + refine-pass generation + up to 2 optional extra LoRAs"
 template: /home/cobra/video_queue/workflow_defs_v2/templates/wan22_enhancedH_q5L_2stage_gguf_vertical_ctxwindow2_extra_lora.api.json
 input_type: image
 input_extensions: [.png, .jpg, .jpeg, .webp, .bmp]
@@ -57,14 +57,27 @@ parameters:
     nodes: ["202"]
     field: lora_name
     default: ""
-  extra_lora_strength:
-    label: "Extra LoRA strength"
+  extra_lora_strength_high:
+    label: "Extra LoRA 1 strength (high-noise)"
     type: float
-    nodes: ["201", "202"]
+    nodes: ["201"]
     field: strength_model
-    default: 0.0
+    default: 0.8
     min: 0.0
     max: 2.0
+  extra_lora_strength_low:
+    label: "Extra LoRA 1 strength (low-noise)"
+    type: float
+    nodes: ["202"]
+    field: strength_model
+    default: 0.8
+    min: 0.0
+    max: 2.0
+  extra_lora_enabled:
+    label: "Enable Extra LoRA 1"
+    type: bool
+    default: false
+    nodes: []
   extra_lora2_high_name:
     label: "Extra LoRA 2 (high-noise)"
     type: text
@@ -77,34 +90,27 @@ parameters:
     nodes: ["212"]
     field: lora_name
     default: ""
-  extra_lora2_strength:
-    label: "Extra LoRA 2 strength"
+  extra_lora2_strength_high:
+    label: "Extra LoRA 2 strength (high-noise)"
     type: float
-    nodes: ["211", "212"]
+    nodes: ["211"]
     field: strength_model
-    default: 0.0
+    default: 0.8
     min: 0.0
     max: 2.0
-  extra_lora3_high_name:
-    label: "Extra LoRA 3 (high-noise)"
-    type: text
-    nodes: ["221"]
-    field: lora_name
-    default: ""
-  extra_lora3_low_name:
-    label: "Extra LoRA 3 (low-noise)"
-    type: text
-    nodes: ["222"]
-    field: lora_name
-    default: ""
-  extra_lora3_strength:
-    label: "Extra LoRA 3 strength"
+  extra_lora2_strength_low:
+    label: "Extra LoRA 2 strength (low-noise)"
     type: float
-    nodes: ["221", "222"]
+    nodes: ["212"]
     field: strength_model
-    default: 0.0
+    default: 0.8
     min: 0.0
     max: 2.0
+  extra_lora2_enabled:
+    label: "Enable Extra LoRA 2"
+    type: bool
+    default: false
+    nodes: []
 
 switch_states: {}
 move_processed: true

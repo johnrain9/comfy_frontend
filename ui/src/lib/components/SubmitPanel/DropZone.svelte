@@ -28,10 +28,59 @@
     dispatch('files', allowed);
   }
 
-  function onDrop(event: DragEvent): void {
+  async function collectFilesFromItems(items: DataTransferItemList | null): Promise<File[]> {
+    if (!items) return [];
+    const out: File[] = [];
+
+    async function walkEntry(entry: any): Promise<void> {
+      if (!entry) return;
+      if (entry.isFile) {
+        await new Promise<void>((resolve) => {
+          entry.file((file: File) => {
+            out.push(file);
+            resolve();
+          });
+        });
+        return;
+      }
+      if (entry.isDirectory) {
+        const reader = entry.createReader();
+        await new Promise<void>((resolve) => {
+          const read = () => {
+            reader.readEntries(async (entries: any[]) => {
+              if (!entries || entries.length === 0) {
+                resolve();
+                return;
+              }
+              for (const child of entries) {
+                await walkEntry(child);
+              }
+              read();
+            });
+          };
+          read();
+        });
+      }
+    }
+
+    for (const item of Array.from(items)) {
+      const anyItem = item as any;
+      const entry = typeof anyItem.webkitGetAsEntry === 'function' ? anyItem.webkitGetAsEntry() : null;
+      if (entry) {
+        await walkEntry(entry);
+        continue;
+      }
+      const file = item.getAsFile();
+      if (file) out.push(file);
+    }
+    return out;
+  }
+
+  async function onDrop(event: DragEvent): Promise<void> {
     event.preventDefault();
     if (disabled) return;
-    const files = Array.from(event.dataTransfer?.files || []);
+    const fromItems = await collectFilesFromItems(event.dataTransfer?.items || null);
+    const files = fromItems.length ? fromItems : Array.from(event.dataTransfer?.files || []);
     publish(files);
   }
 
@@ -59,6 +108,7 @@
       {#if !thumbnails.length}
         <span class="hint">No files selected</span>
       {:else}
+        <span class="hint">{thumbnails.length} file(s) selected</span>
         {#each thumbnails as t}
           {#if t.startsWith('blob:') || t.startsWith('data:') || t.startsWith('http') || t.startsWith('/')}
             <img class="thumb" src={t} alt="preview" />

@@ -189,6 +189,9 @@ def queue_server() -> QueueServer:
     comfy_root = temp_dir / "comfy_root"
     (queue_root / "data").mkdir(parents=True, exist_ok=True)
     shutil.copytree(PROJECT_ROOT / "static", queue_root / "static")
+    ui_build = PROJECT_ROOT / "ui" / "build"
+    if ui_build.exists():
+        shutil.copytree(ui_build, queue_root / "ui" / "build", dirs_exist_ok=True)
     (comfy_root / "input").mkdir(parents=True, exist_ok=True)
     (comfy_root / "models" / "loras").mkdir(parents=True, exist_ok=True)
 
