@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from comfy_client import health_check
 from db import QueueDB
 from defs import ParameterDef, WorkflowDef, WorkflowDefError, load_all
-from prompt_builder import build_prompts, resolve_params
+from prompt_builder import PromptSpec, build_prompts, resolve_params
 from worker import Worker
 
 LORA_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin"}
@@ -24,6 +24,7 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 UPSCALE_MODEL_EXTENSIONS = {".pth", ".pt", ".ckpt", ".safetensors", ".bin"}
 WAN_POSITIVE_TEMPLATE = "(at 0 second: )(at 3 second: )(at 7 second: )"
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
+QUEUE_STAGING_DIRNAME = "_video_queue_staging"
 RESOLUTION_PRESETS: list[dict[str, Any]] = [
     {"id": "384x672", "label": "384 x 672", "width": 384, "height": 672},
     {"id": "480x848", "label": "480 x 848", "width": 480, "height": 848},
@@ -39,7 +40,7 @@ RESOLUTION_PRESET_MAP: dict[str, tuple[int, int]] = {
 class JobCreateRequest(BaseModel):
     workflow_name: str
     job_name: str | None = None
-    input_dir: str
+    input_dir: str = ""
     params: dict[str, Any] = Field(default_factory=dict)
     resolution_preset: str | None = None
     flip_orientation: bool = False
@@ -88,6 +89,7 @@ class AppState:
         self.root = Path(os.environ.get("VIDEO_QUEUE_ROOT", str(Path.home() / "video_queue"))).expanduser().resolve()
         self.data_dir = self.root / "data"
         self.static_dir = self.root / "static"
+        self.ui_build_dir = self.root / "ui" / "build"
         self.defs_dir = Path(os.environ.get("WORKFLOW_DEFS_DIR", str(self.root / "workflow_defs_v2"))).expanduser().resolve()
         self.comfy_root = Path(os.environ.get("COMFY_ROOT", str(Path.home() / "ComfyUI"))).expanduser().resolve()
         self.comfy_input_dir = self.comfy_root / "input"
@@ -108,6 +110,17 @@ app = FastAPI(title="ComfyUI Workflow Manager")
 
 if state.static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(state.static_dir)), name="static")
+# Mount V2 before declaring root handlers so /v2 is always resolved explicitly.
+if state.ui_build_dir.exists():
+    app.mount("/v2", StaticFiles(directory=str(state.ui_build_dir), html=True), name="ui_v2")
+else:
+    @app.get("/v2")
+    @app.get("/v2/{path:path}")
+    def ui_v2_unavailable() -> PlainTextResponse:
+        return PlainTextResponse(
+            "UI V2 build not found. Run: cd ui && npm install && npm run build",
+            status_code=503,
+        )
 
 
 @app.on_event("startup")
@@ -119,6 +132,10 @@ def on_startup() -> None:
         raise RuntimeError(f"Failed to load workflow definitions: {exc}") from exc
     state.worker = Worker(state.db, state.workflows, state.comfy_base_url, state.data_dir)
     state.worker.start()
+    if state.ui_build_dir.exists():
+        print(f"[video_queue] UI V2 enabled at /v2 from {state.ui_build_dir}")
+    else:
+        print(f"[video_queue] UI V2 build missing at {state.ui_build_dir}; /v2 returns setup instructions")
 
 
 @app.on_event("shutdown")
@@ -130,6 +147,14 @@ def on_shutdown() -> None:
 
 @app.get("/")
 def index() -> FileResponse:
+    index_file = state.static_dir / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="UI not found")
+    return FileResponse(index_file)
+
+
+@app.get("/legacy")
+def legacy_index() -> FileResponse:
     index_file = state.static_dir / "index.html"
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="UI not found")
@@ -443,6 +468,8 @@ def _infer_workflow_category(wf: WorkflowDef) -> str:
     if wf.category:
         return str(wf.category).strip().lower()
     name = str(wf.name or "").lower()
+    if "image-gen" in name or "t2i" in name or "i2i" in name:
+        return "image_gen"
     if "upscale-images" in name:
         return "image_upscale"
     if "upscale" in name:
@@ -653,12 +680,67 @@ def _list_inputs(input_dir: Path, exts: list[str]) -> list[Path]:
     return sorted([p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() in allowed])
 
 
+def _sanitize_stage_filename(name: str) -> str:
+    base = Path(name or "").name
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(base).stem).strip("._") or "input"
+    suffix = Path(base).suffix
+    if suffix and not re.fullmatch(r"\.[A-Za-z0-9]+", suffix):
+        suffix = re.sub(r"[^A-Za-z0-9]+", "", suffix)
+        suffix = f".{suffix}" if suffix else ""
+    return f"{stem}{suffix.lower()}"
+
+
+def _dedupe_stage_dest(stage_dir: Path, filename: str) -> Path:
+    candidate = stage_dir / filename
+    if not candidate.exists():
+        return candidate
+
+    stem = Path(filename).stem
+    suffix = Path(filename).suffix
+    idx = 2
+    while True:
+        candidate = stage_dir / f"{stem}__{idx}{suffix}"
+        if not candidate.exists():
+            return candidate
+        idx += 1
+
+
+def _stage_input_files(files: list[Path]) -> tuple[list[Path], dict[str, str]]:
+    batch_token = f"{int(time.time() * 1000)}_{time.time_ns() % 1_000_000:06d}"
+    stage_dir = (state.comfy_input_dir / QUEUE_STAGING_DIRNAME / batch_token).resolve()
+    stage_dir.mkdir(parents=True, exist_ok=True)
+
+    staged_paths: list[Path] = []
+    source_by_staged: dict[str, str] = {}
+    for src in files:
+        source_path = src.expanduser().resolve()
+        if not source_path.exists() or not source_path.is_file():
+            raise ValueError(f"input file not found for staging: {source_path}")
+        filename = _sanitize_stage_filename(source_path.name)
+        dest = _dedupe_stage_dest(stage_dir, filename).resolve()
+        shutil.copy2(source_path, dest)
+        staged_paths.append(dest)
+        source_by_staged[str(dest)] = str(source_path)
+
+    return staged_paths, source_by_staged
+
+
 def _derive_split_job_name(base_name: str | None, input_file: Path) -> str:
     base = str(base_name or "").strip()
     stem = input_file.stem
     if base:
         return f"{base} | {stem}"
     return stem
+
+
+def _ensure_worker_running() -> None:
+    if not state.worker:
+        return
+    if state.db.is_paused():
+        return
+    if state.worker.running:
+        return
+    state.worker.start()
 
 
 def _enqueue_job_from_files(
@@ -672,17 +754,35 @@ def _enqueue_job_from_files(
     job_name: str | None = None,
     move_processed: bool = False,
 ) -> dict[str, Any]:
+    _ensure_worker_running()
+    source_files = [Path(p).expanduser().resolve() for p in files]
     try:
         resolved = resolve_params(wf, params)
         resolution = _resolve_resolution_preset(resolution_preset)
-        specs = build_prompts(
+        if source_files:
+            staged_files, source_by_staged = _stage_input_files(source_files)
+        else:
+            staged_files, source_by_staged = [], {}
+        staged_specs = build_prompts(
             wf,
-            files,
+            staged_files,
             resolved,
             comfy_input_dir=state.comfy_input_dir,
             resolution=resolution,
             flip_orientation=bool(flip_orientation),
         )
+        specs: list[PromptSpec] = []
+        for spec in staged_specs:
+            staged_key = str(Path(spec.input_file).expanduser().resolve())
+            source_input = source_by_staged.get(staged_key, spec.input_file)
+            specs.append(
+                PromptSpec(
+                    input_file=source_input,
+                    prompt_json=spec.prompt_json,
+                    seed_used=spec.seed_used,
+                    output_prefix=spec.output_prefix,
+                )
+            )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -705,20 +805,24 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
     if not wf:
         raise HTTPException(status_code=400, detail=f"unknown workflow: {req.workflow_name}")
 
-    try:
-        normalized_input_dir = _normalize_input_dir(req.input_dir)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    files: list[Path] = []
+    if wf.input_type in {"image", "video"}:
+        try:
+            normalized_input_dir = _normalize_input_dir(req.input_dir)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    input_dir = Path(normalized_input_dir).expanduser().resolve()
-    if not input_dir.exists() or not input_dir.is_dir():
-        raise HTTPException(status_code=400, detail=f"input directory not found: {input_dir}")
+        input_dir = Path(normalized_input_dir).expanduser().resolve()
+        if not input_dir.exists() or not input_dir.is_dir():
+            raise HTTPException(status_code=400, detail=f"input directory not found: {input_dir}")
 
-    files = _list_inputs(input_dir, wf.input_extensions)
-    if not files:
-        raise HTTPException(status_code=400, detail=f"no matching input files in {input_dir}")
+        files = _list_inputs(input_dir, wf.input_extensions)
+        if not files:
+            raise HTTPException(status_code=400, detail=f"no matching input files in {input_dir}")
+    else:
+        normalized_input_dir = str(state.comfy_input_dir.expanduser().resolve())
 
-    if bool(req.split_by_input):
+    if bool(req.split_by_input) and files:
         created: list[dict[str, Any]] = []
         for src in files:
             created.append(
@@ -825,6 +929,7 @@ def queue_pause() -> dict[str, Any]:
 @app.post("/api/queue/resume")
 def queue_resume() -> dict[str, Any]:
     state.db.resume()
+    _ensure_worker_running()
     return {"worker": "running"}
 
 
@@ -839,6 +944,7 @@ def queue_clear() -> dict[str, Any]:
 
 @app.get("/api/health")
 def api_health() -> dict[str, Any]:
+    _ensure_worker_running()
     counts = state.db.queue_counts()
     return {
         "comfy": health_check(state.comfy_base_url),
