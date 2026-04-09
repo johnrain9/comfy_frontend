@@ -1,0 +1,179 @@
+name: upscale-qwen-image-edit
+display_name: "Upscale (Qwen Image Edit)"
+group: "Utilities"
+category: "image_upscale"
+description: "AI upscale/enhance using Qwen-Image-Edit-2511 GGUF via ComfyUI"
+input_type: image
+input_extensions: [.png, .jpg, .jpeg, .webp, .bmp]
+
+template_inline:
+  "1":
+    class_type: LoadImage
+    inputs:
+      image: example.png
+  "2":
+    class_type: FluxKontextImageScale
+    inputs:
+      image: ["1", 0]
+  "3":
+    class_type: UnetLoaderGGUF
+    inputs:
+      unet_name: "Qwen/qwen-image-edit-2511-Q4_K_M.gguf"
+  "4":
+    class_type: LoraLoaderModelOnly
+    inputs:
+      lora_name: "Qwen/Qwen-Image-Lightning-8steps-V2.0-r32.safetensors"
+      strength_model: 1
+      model: ["3", 0]
+  "5":
+    class_type: ModelSamplingAuraFlow
+    inputs:
+      shift: 3
+      model: ["4", 0]
+  "6":
+    class_type: CFGNorm
+    inputs:
+      strength: 1
+      model: ["5", 0]
+  "7":
+    class_type: CLIPLoader
+    inputs:
+      clip_name: "Qwen/qwen_2.5_vl_7b_fp8_scaled.safetensors"
+      type: "qwen_image"
+      device: "default"
+  "8":
+    class_type: VAELoader
+    inputs:
+      vae_name: "Qwen/qwen_image_vae.safetensors"
+  "10":
+    class_type: TextEncodeQwenImageEditPlus
+    inputs:
+      prompt: "preserve the same person and identity, same face, same eyes, same nose, same mouth, same hairline, same body proportions, realistic professional photo, natural skin texture, natural lighting, preserve original composition and pose, restore fine detail, remove blur and compression artifacts"
+      clip: ["7", 0]
+      vae: ["8", 0]
+      image1: ["2", 0]
+  "11":
+    class_type: TextEncodeQwenImageEditPlus
+    inputs:
+      prompt: "low quality, blurry, distorted, duplicate, distorted limbs, extra limbs, deformed hands, poor lighting, pixelated, grainy, oversaturated, overexposed, underexposed, low resolution, artifacts, noise, watermark, logo, cartoon, plastic skin, beauty filter, glamor retouch, airbrushed skin, doll-like face, stylized face, changed identity, different person"
+      clip: ["7", 0]
+      vae: ["8", 0]
+      image1: ["2", 0]
+  "12":
+    class_type: FluxKontextMultiReferenceLatentMethod
+    inputs:
+      reference_latents_method: "index_timestep_zero"
+      conditioning: ["10", 0]
+  "13":
+    class_type: FluxKontextMultiReferenceLatentMethod
+    inputs:
+      reference_latents_method: "index_timestep_zero"
+      conditioning: ["11", 0]
+  "14":
+    class_type: EmptySD3LatentImage
+    inputs:
+      width: 1536
+      height: 1024
+      batch_size: 1
+  "15":
+    class_type: KSampler
+    inputs:
+      seed: 0
+      control_after_generate: "randomize"
+      steps: 12
+      cfg: 1.2
+      sampler_name: "euler"
+      scheduler: "simple"
+      denoise: 0.65
+      model: ["6", 0]
+      positive: ["12", 0]
+      negative: ["13", 0]
+      latent_image: ["14", 0]
+  "16":
+    class_type: VAEDecode
+    inputs:
+      samples: ["15", 0]
+      vae: ["8", 0]
+  "17":
+    class_type: SaveImage
+    inputs:
+      images: ["16", 0]
+      filename_prefix: "upscaled/pq"
+
+file_bindings:
+  load_image:
+    nodes: ["1"]
+    field: image
+  output_prefix:
+    nodes: ["17"]
+    field: filename_prefix
+  seed:
+    nodes: ["15"]
+    field: seed
+
+parameters:
+  positive_prompt:
+    label: "Enhancement prompt"
+    type: text
+    nodes: ["10"]
+    field: prompt
+    default: "preserve the same person and identity, same face, same eyes, same nose, same mouth, same hairline, same body proportions, realistic professional photo, natural skin texture, natural lighting, preserve original composition and pose, restore fine detail, remove blur and compression artifacts"
+  scale_multiple:
+    label: "Scale multiple"
+    type: float
+    default: 1.5
+    min: 1.0
+    max: 3.0
+  negative_prompt:
+    label: "Negative prompt"
+    type: text
+    nodes: ["11"]
+    field: prompt
+    default: "low quality, blurry, distorted, duplicate, distorted limbs, extra limbs, deformed hands, poor lighting, pixelated, grainy, oversaturated, overexposed, underexposed, low resolution, artifacts, noise, watermark, logo, cartoon, plastic skin, beauty filter, glamor retouch, airbrushed skin, doll-like face, stylized face, changed identity, different person"
+  width:
+    label: "Output width"
+    type: int
+    nodes: ["14"]
+    field: width
+    default: 1536
+    min: 512
+    max: 3072
+  height:
+    label: "Output height"
+    type: int
+    nodes: ["14"]
+    field: height
+    default: 1024
+    min: 512
+    max: 3072
+  steps:
+    label: "Sampling steps"
+    type: int
+    nodes: ["15"]
+    field: steps
+    default: 12
+    min: 4
+    max: 50
+  cfg:
+    label: "CFG scale"
+    type: float
+    nodes: ["15"]
+    field: cfg
+    default: 1.2
+    min: 1.0
+    max: 10.0
+  denoise:
+    label: "Denoise strength"
+    type: float
+    nodes: ["15"]
+    field: denoise
+    default: 0.65
+    min: 0.1
+    max: 1.0
+  output_prefix:
+    label: "Output prefix"
+    type: text
+    default: "upscaled/pq"
+
+switch_states: {}
+move_processed: false

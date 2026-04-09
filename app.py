@@ -4,7 +4,6 @@ import os
 import re
 import shutil
 import subprocess
-import time
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +16,16 @@ from auto_prompt import AutoPromptGenerator, LMStudioUnavailable
 from comfy_client import health_check
 from db import QueueDB
 from defs import ParameterDef, WorkflowDef, WorkflowDefError, load_all
-from prompt_builder import PromptSpec, build_prompts, resolve_params
+from services.job_service import (
+    dedupe_stage_dest as _dedupe_stage_dest,
+    enqueue_job as enqueue_prepared_job,
+    get_workflow_or_error,
+    prepare_prompt_specs,
+    stage_input_files,
+    sanitize_stage_filename as _sanitize_stage_filename,
+    validate_batch_input_dir,
+    validate_single_input_file,
+)
 from worker import Worker
 
 LORA_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin"}
@@ -737,8 +745,7 @@ async def api_upload_input_image(
             detail=f"unsupported image extension: {suffix or '(none)'} (allowed: {', '.join(sorted(IMAGE_EXTENSIONS))})",
         )
 
-    safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(raw_name).stem).strip("._") or "upload"
-    unique = f"{int(time.time() * 1000)}_{safe_stem}{suffix}"
+    upload_name = _sanitize_stage_filename(raw_name)
     subdir = str(x_subdir or "").strip().replace("\\", "/")
     if subdir:
         subdir = re.sub(r"[^A-Za-z0-9_./-]+", "_", subdir).strip("/")
@@ -750,64 +757,18 @@ async def api_upload_input_image(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="invalid upload subdir") from exc
     base_dir.mkdir(parents=True, exist_ok=True)
-    dest = (base_dir / unique).resolve()
+    dest = _dedupe_stage_dest(base_dir, upload_name).resolve()
 
     data = await request.body()
     if not data:
         raise HTTPException(status_code=400, detail="uploaded file is empty")
     dest.write_bytes(data)
 
-    return {"path": str(dest), "dir": str(base_dir)}
-
-
-def _list_inputs(input_dir: Path, exts: list[str]) -> list[Path]:
-    allowed = {e.lower() for e in exts}
-    return sorted([p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() in allowed])
-
-
-def _sanitize_stage_filename(name: str) -> str:
-    base = Path(name or "").name
-    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(base).stem).strip("._") or "input"
-    suffix = Path(base).suffix
-    if suffix and not re.fullmatch(r"\.[A-Za-z0-9]+", suffix):
-        suffix = re.sub(r"[^A-Za-z0-9]+", "", suffix)
-        suffix = f".{suffix}" if suffix else ""
-    return f"{stem}{suffix.lower()}"
-
-
-def _dedupe_stage_dest(stage_dir: Path, filename: str) -> Path:
-    candidate = stage_dir / filename
-    if not candidate.exists():
-        return candidate
-
-    stem = Path(filename).stem
-    suffix = Path(filename).suffix
-    idx = 2
-    while True:
-        candidate = stage_dir / f"{stem}__{idx}{suffix}"
-        if not candidate.exists():
-            return candidate
-        idx += 1
+    return {"path": str(dest), "dir": str(base_dir), "original_filename": raw_name}
 
 
 def _stage_input_files(files: list[Path]) -> tuple[list[Path], dict[str, str]]:
-    batch_token = f"{int(time.time() * 1000)}_{time.time_ns() % 1_000_000:06d}"
-    stage_dir = (state.comfy_input_dir / QUEUE_STAGING_DIRNAME / batch_token).resolve()
-    stage_dir.mkdir(parents=True, exist_ok=True)
-
-    staged_paths: list[Path] = []
-    source_by_staged: dict[str, str] = {}
-    for src in files:
-        source_path = src.expanduser().resolve()
-        if not source_path.exists() or not source_path.is_file():
-            raise ValueError(f"input file not found for staging: {source_path}")
-        filename = _sanitize_stage_filename(source_path.name)
-        dest = _dedupe_stage_dest(stage_dir, filename).resolve()
-        shutil.copy2(source_path, dest)
-        staged_paths.append(dest)
-        source_by_staged[str(dest)] = str(source_path)
-
-    return staged_paths, source_by_staged
+    return stage_input_files(files, comfy_input_dir=Path(state.comfy_input_dir), staging_dirname=QUEUE_STAGING_DIRNAME)
 
 
 def _derive_split_job_name(base_name: str | None, input_file: Path) -> str:
@@ -826,32 +787,6 @@ def _ensure_worker_running() -> None:
     if state.worker.running:
         return
     state.worker.start()
-
-
-def _resolve_per_file_overrides_for_staged(
-    source_files: list[Path],
-    staged_files: list[Path],
-    per_file_params: dict[str, dict[str, Any]] | None,
-) -> dict[str, dict[str, Any]]:
-    raw = per_file_params or {}
-    if not raw:
-        return {}
-
-    out: dict[str, dict[str, Any]] = {}
-    for src, staged in zip(source_files, staged_files):
-        src_abs = str(src.expanduser().resolve())
-        src_name = src.name
-        override = raw.get(src_abs)
-        if override is None:
-            override = raw.get(src_name)
-        if override is None:
-            continue
-        if not isinstance(override, dict):
-            raise ValueError(f"per_file_params[{src_name}] must be an object")
-        out[str(staged.expanduser().resolve())] = dict(override)
-    return out
-
-
 def _auto_prompt_generator(lmstudio_url: str | None = None) -> AutoPromptGenerator:
     return AutoPromptGenerator(lmstudio_url=lmstudio_url or state.lmstudio_url)
 
@@ -883,46 +818,30 @@ def _enqueue_job_from_files(
     move_processed: bool = False,
 ) -> dict[str, Any]:
     _ensure_worker_running()
-    source_files = [Path(p).expanduser().resolve() for p in files]
     try:
-        resolved = resolve_params(wf, params)
         resolution = _resolve_resolution_preset(resolution_preset)
-        if source_files:
-            staged_files, source_by_staged = _stage_input_files(source_files)
-        else:
-            staged_files, source_by_staged = [], {}
-        staged_per_file_params = _resolve_per_file_overrides_for_staged(source_files, staged_files, per_file_params)
-        staged_specs = build_prompts(
+        resolved, specs = prepare_prompt_specs(
             wf,
-            staged_files,
-            resolved,
-            per_file_params=staged_per_file_params,
-            comfy_input_dir=state.comfy_input_dir,
+            files,
+            params,
+            per_file_params=per_file_params,
+            comfy_input_dir=Path(state.comfy_input_dir),
             resolution=resolution,
             flip_orientation=bool(flip_orientation),
+            stage_inputs=True,
+            staging_dirname=QUEUE_STAGING_DIRNAME,
         )
-        specs: list[PromptSpec] = []
-        for spec in staged_specs:
-            staged_key = str(Path(spec.input_file).expanduser().resolve())
-            source_input = source_by_staged.get(staged_key, spec.input_file)
-            specs.append(
-                PromptSpec(
-                    input_file=source_input,
-                    prompt_json=spec.prompt_json,
-                    seed_used=spec.seed_used,
-                    output_prefix=spec.output_prefix,
-                )
-            )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    job_id = state.db.create_job(
-        workflow_name=wf.name,
-        job_name=(str(job_name).strip() if job_name is not None else None),
+    job_id = enqueue_prepared_job(
+        state.db,
+        workflow=wf,
         input_dir=input_dir,
         params_json=resolved,
         prompt_specs=specs,
         priority=priority,
+        job_name=job_name,
         move_processed=bool(move_processed),
     )
     state.db.touch_input_dir_history(input_dir)
@@ -931,9 +850,10 @@ def _enqueue_job_from_files(
 
 @app.post("/api/jobs", status_code=201)
 def create_job(req: JobCreateRequest) -> dict[str, Any]:
-    wf = state.workflows.get(req.workflow_name)
-    if not wf:
-        raise HTTPException(status_code=400, detail=f"unknown workflow: {req.workflow_name}")
+    try:
+        wf = get_workflow_or_error(state.workflows, req.workflow_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         _validate_prompt_mode(prompt_mode=req.prompt_mode, per_file_params=req.per_file_params)
     except ValueError as exc:
@@ -942,17 +862,9 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
     files: list[Path] = []
     if wf.input_type in {"image", "video"}:
         try:
-            normalized_input_dir = _normalize_input_dir(req.input_dir)
+            normalized_input_dir, files = validate_batch_input_dir(wf, req.input_dir)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        input_dir = Path(normalized_input_dir).expanduser().resolve()
-        if not input_dir.exists() or not input_dir.is_dir():
-            raise HTTPException(status_code=400, detail=f"input directory not found: {input_dir}")
-
-        files = _list_inputs(input_dir, wf.input_extensions)
-        if not files:
-            raise HTTPException(status_code=400, detail=f"no matching input files in {input_dir}")
     else:
         normalized_input_dir = str(state.comfy_input_dir.expanduser().resolve())
 
@@ -996,23 +908,15 @@ def create_job(req: JobCreateRequest) -> dict[str, Any]:
 
 @app.post("/api/jobs/single", status_code=201)
 def create_single_job(req: SingleJobCreateRequest) -> dict[str, Any]:
-    wf = state.workflows.get(req.workflow_name)
-    if not wf:
-        raise HTTPException(status_code=400, detail=f"unknown workflow: {req.workflow_name}")
-
     try:
-        normalized_image = _normalize_input_dir(req.input_image, field_label="input image")
+        wf = get_workflow_or_error(state.workflows, req.workflow_name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    image_path = Path(normalized_image).expanduser().resolve()
-    if not image_path.exists() or not image_path.is_file():
-        raise HTTPException(status_code=400, detail=f"input image not found: {image_path}")
-
-    allowed = {ext.lower() for ext in wf.input_extensions}
-    if image_path.suffix.lower() not in allowed:
-        allowed_text = ", ".join(sorted(allowed))
-        raise HTTPException(status_code=400, detail=f"unsupported input image extension: {image_path.suffix} (allowed: {allowed_text})")
+    try:
+        image_path = validate_single_input_file(wf, req.input_image, field_label="input image")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return _enqueue_job_from_files(
         wf=wf,

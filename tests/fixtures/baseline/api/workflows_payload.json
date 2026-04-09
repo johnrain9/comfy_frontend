@@ -1,9 +1,229 @@
 [
   {
+    "name": "image-gen-flux-img2img",
+    "display_name": "FLUX Img2Img (FluxedUp GGUF)",
+    "group": "Image Gen",
+    "category": "image_gen",
+    "description": "Image-to-image FLUX workflow using flux_img2img_fluxedup_gguf_clean template",
+    "input_type": "image",
+    "input_extensions": [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".webp",
+      ".bmp"
+    ],
+    "supports_resolution": false,
+    "parameters": {
+      "positive_prompt": {
+        "label": "Positive prompt",
+        "type": "text",
+        "default": "girl with amazing ass in leggings and sports bra",
+        "min": null,
+        "max": null
+      },
+      "style_prompt": {
+        "label": "Style / details prompt",
+        "type": "text",
+        "default": "\n\n",
+        "min": null,
+        "max": null
+      },
+      "guidance": {
+        "label": "Guidance",
+        "type": "float",
+        "default": 3.5,
+        "min": 0.0,
+        "max": 20.0
+      },
+      "denoise": {
+        "label": "Denoise",
+        "type": "float",
+        "default": 0.5,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "steps": {
+        "label": "Steps",
+        "type": "int",
+        "default": 25,
+        "min": 1,
+        "max": 100
+      },
+      "scale_by": {
+        "label": "Pre-encode scale",
+        "type": "float",
+        "default": 0.75,
+        "min": 0.25,
+        "max": 4.0
+      },
+      "randomize_seed": {
+        "label": "Randomize seed",
+        "type": "bool",
+        "default": true,
+        "min": null,
+        "max": null
+      },
+      "tries": {
+        "label": "Tries per image",
+        "type": "int",
+        "default": 1,
+        "min": 1,
+        "max": 10
+      },
+      "output_prefix": {
+        "label": "Output prefix",
+        "type": "text",
+        "default": "image/flux_img2img",
+        "min": null,
+        "max": null
+      }
+    }
+  },
+  {
+    "name": "upscale-images-i2v",
+    "display_name": "Upscale Images (I2V Prep)",
+    "group": "Utilities",
+    "category": "image_upscale",
+    "description": "Batch AI-upscale source images before WAN I2V (ESRNet/ESRGAN)",
+    "input_type": "image",
+    "input_extensions": [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".webp",
+      ".bmp"
+    ],
+    "supports_resolution": false,
+    "parameters": {
+      "upscale_model_name": {
+        "label": "AI upscale model (.pth)",
+        "type": "text",
+        "default": "RealESRGAN_x2plus.pth",
+        "min": null,
+        "max": null
+      },
+      "final_scale_factor": {
+        "label": "Post-AI scale factor",
+        "type": "float",
+        "default": 0.75,
+        "min": 0.25,
+        "max": 2.0
+      },
+      "recover_enabled": {
+        "label": "Recover low-quality input (stronger enhancement)",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      },
+      "recover_model_name": {
+        "label": "Recover model",
+        "type": "text",
+        "default": "RealESRGAN_x4plus.pth",
+        "min": null,
+        "max": null
+      },
+      "recover_denoise_enabled": {
+        "label": "Denoise (median blur)",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      },
+      "recover_denoise_size": {
+        "label": "Denoise size",
+        "type": "int",
+        "default": 3,
+        "min": 1,
+        "max": 31
+      },
+      "recover_sharpen_enabled": {
+        "label": "Sharpen",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      },
+      "recover_sharpen_intensity": {
+        "label": "Sharpen intensity",
+        "type": "int",
+        "default": 3,
+        "min": 1,
+        "max": 32
+      },
+      "output_prefix": {
+        "label": "Output prefix",
+        "type": "text",
+        "default": "image/upscaled_i2v",
+        "min": null,
+        "max": null
+      }
+    }
+  },
+  {
+    "name": "upscale-interpolate-only",
+    "display_name": "Video Upscale / Interpolate",
+    "group": "Utilities",
+    "category": "video_upscale",
+    "description": "Batch video upscale or interpolation using switchable mode",
+    "input_type": "video",
+    "input_extensions": [
+      ".mp4",
+      ".mov",
+      ".mkv",
+      ".webm",
+      ".avi",
+      ".m4v",
+      ".mpg",
+      ".mpeg",
+      ".wmv"
+    ],
+    "supports_resolution": false,
+    "parameters": {
+      "mode_interpolate": {
+        "label": "Mode: Interpolate",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      },
+      "upscale_scale_by": {
+        "label": "Upscale scale",
+        "type": "float",
+        "default": 1.5,
+        "min": 1.0,
+        "max": 8.0
+      },
+      "interpolate_multiplier": {
+        "label": "Interpolate multiplier",
+        "type": "int",
+        "default": 2,
+        "min": 1,
+        "max": 8
+      },
+      "interpolate_fps": {
+        "label": "Interpolate output FPS",
+        "type": "int",
+        "default": 48,
+        "min": 1,
+        "max": 240
+      },
+      "output_prefix": {
+        "label": "Output prefix",
+        "type": "text",
+        "default": "video/upscale_or_interp",
+        "min": null,
+        "max": null
+      }
+    }
+  },
+  {
     "name": "wan-context-lite-2stage",
     "display_name": "WAN ContextWindow Single Pass (81f)",
     "group": "WAN V2",
-    "description": "Single 81-frame pass with high/low noise samplers and selectable LoRAs",
+    "category": "video_gen",
+    "description": "Single 81-frame pass rebuilt from ContextWindow2 base with fixed 4-step LoRA and up to 2 optional extra LoRA slots",
     "input_type": "image",
     "input_extensions": [
       ".png",
@@ -24,7 +244,7 @@
       "negative_prompt": {
         "label": "Negative prompt",
         "type": "text",
-        "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+        "default": "\u8272\u8c03\u8273\u4e3d\uff0c\u8fc7\u66dd\uff0c\u9759\u6001\uff0c\u7ec6\u8282\u6a21\u7cca\u4e0d\u6e05\uff0c\u5b57\u5e55\uff0c\u98ce\u683c\uff0c\u4f5c\u54c1\uff0c\u753b\u4f5c\uff0c\u753b\u9762\uff0c\u9759\u6b62\uff0c\u6574\u4f53\u53d1\u7070\uff0c\u6700\u5dee\u8d28\u91cf\uff0c\u4f4e\u8d28\u91cf\uff0cJPEG\u538b\u7f29\u6b8b\u7559\uff0c\u4e11\u964b\u7684\uff0c\u6b8b\u7f3a\u7684\uff0c\u591a\u4f59\u7684\u624b\u6307\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u624b\u90e8\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u8138\u90e8\uff0c\u7578\u5f62\u7684\uff0c\u6bc1\u5bb9\u7684\uff0c\u5f62\u6001\u7578\u5f62\u7684\u80a2\u4f53\uff0c\u624b\u6307\u878d\u5408\uff0c\u9759\u6b62\u4e0d\u52a8\u7684\u753b\u9762\uff0c\u6742\u4e71\u7684\u80cc\u666f\uff0c\u4e09\u6761\u817f\uff0c\u80cc\u666f\u4eba\u5f88\u591a\uff0c\u5012\u7740\u8d70",
         "min": null,
         "max": null
       },
@@ -49,26 +269,212 @@
         "min": null,
         "max": null
       },
-      "lora_high_name": {
-        "label": "LoRA high-noise",
+      "extra_lora_enabled": {
+        "label": "Enable Extra LoRA 1",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      },
+      "extra_lora_high_name": {
+        "label": "Extra LoRA 1 (high-noise)",
         "type": "text",
         "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
         "min": null,
         "max": null
       },
-      "lora_low_name": {
-        "label": "LoRA low-noise",
+      "extra_lora_low_name": {
+        "label": "Extra LoRA 1 (low-noise)",
         "type": "text",
         "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
         "min": null,
         "max": null
       },
-      "lora_strength": {
-        "label": "LoRA strength",
+      "extra_lora_strength_high": {
+        "label": "Extra LoRA 1 strength (high-noise)",
         "type": "float",
-        "default": 1.0,
+        "default": 0.8,
         "min": 0.0,
         "max": 2.0
+      },
+      "extra_lora_strength_low": {
+        "label": "Extra LoRA 1 strength (low-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora2_enabled": {
+        "label": "Enable Extra LoRA 2",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_high_name": {
+        "label": "Extra LoRA 2 (high-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_low_name": {
+        "label": "Extra LoRA 2 (low-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_strength_high": {
+        "label": "Extra LoRA 2 strength (high-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora2_strength_low": {
+        "label": "Extra LoRA 2 strength (low-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      }
+    }
+  },
+  {
+    "name": "wan-context-3stage-split-prompts",
+    "display_name": "WAN ContextWindow2 Extend (3-pass, split prompts)",
+    "group": "WAN V2",
+    "category": "video_gen",
+    "description": "ContextWindow2 workflow with 3 passes and separate stage prompts + up to 2 optional extra LoRAs",
+    "input_type": "image",
+    "input_extensions": [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".webp",
+      ".bmp"
+    ],
+    "supports_resolution": true,
+    "parameters": {
+      "positive_prompt_stage1": {
+        "label": "Positive prompt (stage 1)",
+        "type": "text",
+        "default": "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+        "min": null,
+        "max": null
+      },
+      "positive_prompt_stage2": {
+        "label": "Positive prompt (stage 2)",
+        "type": "text",
+        "default": "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+        "min": null,
+        "max": null
+      },
+      "positive_prompt_stage3": {
+        "label": "Positive prompt (stage 3)",
+        "type": "text",
+        "default": "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+        "min": null,
+        "max": null
+      },
+      "negative_prompt": {
+        "label": "Negative prompt",
+        "type": "text",
+        "default": "\u8272\u8c03\u8273\u4e3d\uff0c\u8fc7\u66dd\uff0c\u9759\u6001\uff0c\u7ec6\u8282\u6a21\u7cca\u4e0d\u6e05\uff0c\u5b57\u5e55\uff0c\u98ce\u683c\uff0c\u4f5c\u54c1\uff0c\u753b\u4f5c\uff0c\u753b\u9762\uff0c\u9759\u6b62\uff0c\u6574\u4f53\u53d1\u7070\uff0c\u6700\u5dee\u8d28\u91cf\uff0c\u4f4e\u8d28\u91cf\uff0cJPEG\u538b\u7f29\u6b8b\u7559\uff0c\u4e11\u964b\u7684\uff0c\u6b8b\u7f3a\u7684\uff0c\u591a\u4f59\u7684\u624b\u6307\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u624b\u90e8\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u8138\u90e8\uff0c\u7578\u5f62\u7684\uff0c\u6bc1\u5bb9\u7684\uff0c\u5f62\u6001\u7578\u5f62\u7684\u80a2\u4f53\uff0c\u624b\u6307\u878d\u5408\uff0c\u9759\u6b62\u4e0d\u52a8\u7684\u753b\u9762\uff0c\u6742\u4e71\u7684\u80cc\u666f\uff0c\u4e09\u6761\u817f\uff0c\u80cc\u666f\u4eba\u5f88\u591a\uff0c\u5012\u7740\u8d70",
+        "min": null,
+        "max": null
+      },
+      "randomize_seed": {
+        "label": "Randomize seeds",
+        "type": "bool",
+        "default": true,
+        "min": null,
+        "max": null
+      },
+      "tries": {
+        "label": "Tries per image",
+        "type": "int",
+        "default": 1,
+        "min": 1,
+        "max": 10
+      },
+      "output_prefix": {
+        "label": "Output prefix",
+        "type": "text",
+        "default": "video/auto_batch",
+        "min": null,
+        "max": null
+      },
+      "extra_lora_high_name": {
+        "label": "Extra LoRA (high-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora_low_name": {
+        "label": "Extra LoRA (low-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora_strength_high": {
+        "label": "Extra LoRA 1 strength (high-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora_strength_low": {
+        "label": "Extra LoRA 1 strength (low-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora_enabled": {
+        "label": "Enable Extra LoRA 1",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_high_name": {
+        "label": "Extra LoRA 2 (high-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_low_name": {
+        "label": "Extra LoRA 2 (low-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_strength_high": {
+        "label": "Extra LoRA 2 strength (high-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora2_strength_low": {
+        "label": "Extra LoRA 2 strength (low-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora2_enabled": {
+        "label": "Enable Extra LoRA 2",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
       }
     }
   },
@@ -76,7 +482,8 @@
     "name": "wan-context-2stage",
     "display_name": "WAN ContextWindow2 Refine (2-pass, 81f)",
     "group": "WAN V2",
-    "description": "ContextWindow2 workflow with first-pass + refine-pass generation",
+    "category": "video_gen",
+    "description": "ContextWindow2 workflow with first-pass + refine-pass generation + up to 2 optional extra LoRAs",
     "input_type": "image",
     "input_extensions": [
       ".png",
@@ -97,7 +504,7 @@
       "negative_prompt": {
         "label": "Negative prompt",
         "type": "text",
-        "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+        "default": "\u8272\u8c03\u8273\u4e3d\uff0c\u8fc7\u66dd\uff0c\u9759\u6001\uff0c\u7ec6\u8282\u6a21\u7cca\u4e0d\u6e05\uff0c\u5b57\u5e55\uff0c\u98ce\u683c\uff0c\u4f5c\u54c1\uff0c\u753b\u4f5c\uff0c\u753b\u9762\uff0c\u9759\u6b62\uff0c\u6574\u4f53\u53d1\u7070\uff0c\u6700\u5dee\u8d28\u91cf\uff0c\u4f4e\u8d28\u91cf\uff0cJPEG\u538b\u7f29\u6b8b\u7559\uff0c\u4e11\u964b\u7684\uff0c\u6b8b\u7f3a\u7684\uff0c\u591a\u4f59\u7684\u624b\u6307\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u624b\u90e8\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u8138\u90e8\uff0c\u7578\u5f62\u7684\uff0c\u6bc1\u5bb9\u7684\uff0c\u5f62\u6001\u7578\u5f62\u7684\u80a2\u4f53\uff0c\u624b\u6307\u878d\u5408\uff0c\u9759\u6b62\u4e0d\u52a8\u7684\u753b\u9762\uff0c\u6742\u4e71\u7684\u80cc\u666f\uff0c\u4e09\u6761\u817f\uff0c\u80cc\u666f\u4eba\u5f88\u591a\uff0c\u5012\u7740\u8d70",
         "min": null,
         "max": null
       },
@@ -122,26 +529,205 @@
         "min": null,
         "max": null
       },
-      "lora_high_name": {
-        "label": "LoRA high-noise",
+      "extra_lora_high_name": {
+        "label": "Extra LoRA (high-noise)",
         "type": "text",
         "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
         "min": null,
         "max": null
       },
-      "lora_low_name": {
-        "label": "LoRA low-noise",
+      "extra_lora_low_name": {
+        "label": "Extra LoRA (low-noise)",
         "type": "text",
         "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
         "min": null,
         "max": null
       },
-      "lora_strength": {
-        "label": "LoRA strength",
+      "extra_lora_strength_high": {
+        "label": "Extra LoRA 1 strength (high-noise)",
         "type": "float",
-        "default": 1.0,
+        "default": 0.8,
         "min": 0.0,
         "max": 2.0
+      },
+      "extra_lora_strength_low": {
+        "label": "Extra LoRA 1 strength (low-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora_enabled": {
+        "label": "Enable Extra LoRA 1",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_high_name": {
+        "label": "Extra LoRA 2 (high-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_low_name": {
+        "label": "Extra LoRA 2 (low-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_strength_high": {
+        "label": "Extra LoRA 2 strength (high-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora2_strength_low": {
+        "label": "Extra LoRA 2 strength (low-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora2_enabled": {
+        "label": "Enable Extra LoRA 2",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      }
+    }
+  },
+  {
+    "name": "wan-context-2stage-split-prompts",
+    "display_name": "WAN ContextWindow2 Refine (2-pass, split prompts)",
+    "group": "WAN V2",
+    "category": "video_gen",
+    "description": "ContextWindow2 workflow with separate stage-1 and stage-2 prompts + up to 2 optional extra LoRAs",
+    "input_type": "image",
+    "input_extensions": [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".webp",
+      ".bmp"
+    ],
+    "supports_resolution": true,
+    "parameters": {
+      "positive_prompt_stage1": {
+        "label": "Positive prompt (stage 1)",
+        "type": "text",
+        "default": "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+        "min": null,
+        "max": null
+      },
+      "positive_prompt_stage2": {
+        "label": "Positive prompt (stage 2)",
+        "type": "text",
+        "default": "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+        "min": null,
+        "max": null
+      },
+      "negative_prompt": {
+        "label": "Negative prompt",
+        "type": "text",
+        "default": "\u8272\u8c03\u8273\u4e3d\uff0c\u8fc7\u66dd\uff0c\u9759\u6001\uff0c\u7ec6\u8282\u6a21\u7cca\u4e0d\u6e05\uff0c\u5b57\u5e55\uff0c\u98ce\u683c\uff0c\u4f5c\u54c1\uff0c\u753b\u4f5c\uff0c\u753b\u9762\uff0c\u9759\u6b62\uff0c\u6574\u4f53\u53d1\u7070\uff0c\u6700\u5dee\u8d28\u91cf\uff0c\u4f4e\u8d28\u91cf\uff0cJPEG\u538b\u7f29\u6b8b\u7559\uff0c\u4e11\u964b\u7684\uff0c\u6b8b\u7f3a\u7684\uff0c\u591a\u4f59\u7684\u624b\u6307\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u624b\u90e8\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u8138\u90e8\uff0c\u7578\u5f62\u7684\uff0c\u6bc1\u5bb9\u7684\uff0c\u5f62\u6001\u7578\u5f62\u7684\u80a2\u4f53\uff0c\u624b\u6307\u878d\u5408\uff0c\u9759\u6b62\u4e0d\u52a8\u7684\u753b\u9762\uff0c\u6742\u4e71\u7684\u80cc\u666f\uff0c\u4e09\u6761\u817f\uff0c\u80cc\u666f\u4eba\u5f88\u591a\uff0c\u5012\u7740\u8d70",
+        "min": null,
+        "max": null
+      },
+      "randomize_seed": {
+        "label": "Randomize seeds",
+        "type": "bool",
+        "default": true,
+        "min": null,
+        "max": null
+      },
+      "tries": {
+        "label": "Tries per image",
+        "type": "int",
+        "default": 1,
+        "min": 1,
+        "max": 10
+      },
+      "output_prefix": {
+        "label": "Output prefix",
+        "type": "text",
+        "default": "video/auto_batch",
+        "min": null,
+        "max": null
+      },
+      "extra_lora_high_name": {
+        "label": "Extra LoRA (high-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora_low_name": {
+        "label": "Extra LoRA (low-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora_strength_high": {
+        "label": "Extra LoRA 1 strength (high-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora_strength_low": {
+        "label": "Extra LoRA 1 strength (low-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora_enabled": {
+        "label": "Enable Extra LoRA 1",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_high_name": {
+        "label": "Extra LoRA 2 (high-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_low_name": {
+        "label": "Extra LoRA 2 (low-noise)",
+        "type": "text",
+        "default": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+        "min": null,
+        "max": null
+      },
+      "extra_lora2_strength_high": {
+        "label": "Extra LoRA 2 strength (high-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora2_strength_low": {
+        "label": "Extra LoRA 2 strength (low-noise)",
+        "type": "float",
+        "default": 0.8,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "extra_lora2_enabled": {
+        "label": "Enable Extra LoRA 2",
+        "type": "bool",
+        "default": false,
+        "min": null,
+        "max": null
       }
     }
   }

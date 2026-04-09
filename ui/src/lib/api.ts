@@ -255,7 +255,7 @@ export const api = {
     ),
   uploadInputImage: async (file: File, subdir: string, options: RequestOptions = {}) => {
     const buf = await file.arrayBuffer();
-    return jfetch<{ path: string; dir: string }>(
+    return jfetch<{ path: string; dir: string; original_filename?: string }>(
       '/api/upload/input-image',
       {
         method: 'POST',

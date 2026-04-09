@@ -662,21 +662,23 @@
           <button id="apClearBtn" disabled={autoBusy || submitting} on:click={clearAutoPrompts}>Clear</button>
         </div>
         <div id="autoPromptRows" class="auto-rows">
-          {#each autoPromptItems as item}
+          {#each autoPromptItems as item, itemIndex}
             <div class="auto-row">
               <div class="auto-path">{item.path}</div>
-              <label>Caption</label>
+              <label for={`caption-${itemIndex}`}>Caption</label>
               <textarea
+                id={`caption-${itemIndex}`}
                 value={item.caption || ''}
                 on:input={(event) => {
                   item.caption = (event.target as HTMLTextAreaElement).value;
                   autoPromptItems = [...autoPromptItems];
                 }}
-              />
+              ></textarea>
               {#if item.motion_prompts}
-                {#each Object.entries(item.motion_prompts) as [clip, text]}
-                  <label>{clip}</label>
+                {#each Object.entries(item.motion_prompts) as [clip, text], clipIndex}
+                  <label for={`motion-${itemIndex}-${clipIndex}`}>{clip}</label>
                   <textarea
+                    id={`motion-${itemIndex}-${clipIndex}`}
                     value={text}
                     on:input={(event) => {
                       const next = { ...(item.motion_prompts || {}) };
@@ -684,17 +686,18 @@
                       item.motion_prompts = next;
                       autoPromptItems = [...autoPromptItems];
                     }}
-                  />
+                  ></textarea>
                 {/each}
               {:else}
-                <label>Motion prompt</label>
+                <label for={`motion-single-${itemIndex}`}>Motion prompt</label>
                 <textarea
+                  id={`motion-single-${itemIndex}`}
                   value={item.motion_prompt || ''}
                   on:input={(event) => {
                     item.motion_prompt = (event.target as HTMLTextAreaElement).value;
                     autoPromptItems = [...autoPromptItems];
                   }}
-                />
+                ></textarea>
               {/if}
             </div>
           {/each}
@@ -715,65 +718,74 @@
 </section>
 
 <style>
+  section[aria-label='Submit Panel'] {
+    padding: 1.15rem;
+  }
   .tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 10px;
+    gap: 0.6rem;
+    margin-bottom: 0.9rem;
   }
   .tabs button {
-    background: #111f34;
-    border: 1px solid #2f4a72;
-    color: #e7efff;
-    border-radius: 8px;
-    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--color-line);
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-full);
+    padding: 0.62rem 0.95rem;
     cursor: pointer;
   }
   .tabs button.active {
-    background: #1b2f4d;
-    border-color: #4f79b8;
+    background: linear-gradient(180deg, rgba(201, 144, 76, 0.22), rgba(201, 144, 76, 0.08));
+    border-color: rgba(201, 144, 76, 0.38);
+    color: var(--color-text);
   }
 
   .grid2 {
     display: grid;
-    grid-template-columns: minmax(440px, 1.35fr) minmax(300px, 1fr);
-    gap: 10px;
+    grid-template-columns: minmax(360px, 1.35fr) minmax(240px, 1fr);
+    gap: 1rem;
   }
   .shortcut-hint {
-    color: #8ba6cb;
-    font-size: 11px;
-    margin-bottom: 8px;
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    margin-bottom: 0.8rem;
   }
   .left,
   .right {
     display: grid;
-    gap: 10px;
+    gap: 1rem;
     align-content: start;
+    min-width: 0;
   }
 
   .field-grid {
     display: grid;
-    grid-template-columns: 130px 1fr;
-    gap: 8px;
+    grid-template-columns: 130px minmax(0, 1fr);
+    gap: 0.7rem;
     align-items: center;
+  }
+
+  .field-grid label,
+  .preset-row label {
+    color: var(--color-text-secondary);
+    font-size: 0.82rem;
+    font-weight: 500;
   }
 
   input,
   select,
   button {
-    background: #0a1322;
-    border: 1px solid #2f4a72;
-    color: #e7efff;
-    border-radius: 8px;
-    padding: 6px;
+    border-radius: var(--radius-md);
+    padding: 0.72rem 0.82rem;
   }
 
   .checks {
     display: flex;
-    gap: 14px;
+    gap: 1rem;
     flex-wrap: wrap;
-    color: #c6d7f3;
-    font-size: 13px;
+    color: var(--color-text-secondary);
+    font-size: 0.84rem;
   }
 
   .checks label {
@@ -784,72 +796,69 @@
 
   .preset-row {
     display: grid;
-    grid-template-columns: 130px 1fr auto auto;
-    gap: 8px;
+    grid-template-columns: 130px minmax(0, 1fr) auto auto;
+    gap: 0.7rem;
     align-items: center;
   }
 
   .submit-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 0.7rem;
     align-items: center;
   }
 
   .submit-row span {
-    font-size: 12px;
-    color: #9bb2d3;
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
   }
 
   .primary {
-    background: #1d3354;
-    border-color: #4f79b8;
+    background: linear-gradient(180deg, rgba(201, 144, 76, 0.24), rgba(201, 144, 76, 0.1));
+    border-color: rgba(201, 144, 76, 0.42);
   }
 
   .auto-panel {
     display: grid;
-    gap: 8px;
-    border: 1px solid #22324d;
-    border-radius: 10px;
-    padding: 10px;
-    background: #0a1322;
+    gap: 0.8rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent),
+      rgba(255, 255, 255, 0.02);
   }
 
   .auto-panel .row {
     display: flex;
-    gap: 8px;
+    gap: 0.6rem;
     flex-wrap: wrap;
     align-items: center;
   }
 
   .auto-rows {
     display: grid;
-    gap: 8px;
+    gap: 0.7rem;
     max-height: 240px;
     overflow: auto;
   }
 
   .auto-row {
-    border: 1px solid #1e2f4a;
-    border-radius: 8px;
-    padding: 8px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    padding: 0.8rem;
     display: grid;
-    gap: 6px;
+    gap: 0.45rem;
   }
 
   .auto-path {
-    color: #9bb2d3;
-    font-size: 12px;
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
     word-break: break-all;
   }
 
   .auto-row textarea {
     min-height: 60px;
-  }
-
-  button:disabled {
-    opacity: 0.55;
-    cursor: default;
   }
 
   @media (max-width: 1100px) {

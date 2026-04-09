@@ -126,6 +126,7 @@ class QueueServer:
     base_url: str
     root: Path
     comfy_root: Path
+    workflow_defs_dir: Path
     sample_image: Path
     proc: subprocess.Popen[bytes]
     fake_comfy: FakeComfyServer
@@ -171,8 +172,7 @@ class QueueServer:
         self.fake_comfy.stop()
 
 
-@pytest.fixture(scope="session")
-def queue_server() -> QueueServer:
+def _start_queue_server(workflow_defs_dir: Path) -> tuple[QueueServer, Path]:
     fake_port = _find_free_port()
     fake_http = ThreadingHTTPServer(("127.0.0.1", fake_port), _FakeComfyHandler)
     fake_http.state = {
@@ -203,7 +203,7 @@ def queue_server() -> QueueServer:
     env.update(
         {
             "VIDEO_QUEUE_ROOT": str(queue_root),
-            "WORKFLOW_DEFS_DIR": str(PROJECT_ROOT / "workflow_defs_v2"),
+            "WORKFLOW_DEFS_DIR": str(workflow_defs_dir),
             "COMFY_ROOT": str(comfy_root),
             "COMFY_BASE_URL": fake.base_url,
             "PORT": str(port),
@@ -222,10 +222,17 @@ def queue_server() -> QueueServer:
         base_url=f"http://127.0.0.1:{port}",
         root=queue_root,
         comfy_root=comfy_root,
+        workflow_defs_dir=workflow_defs_dir,
         sample_image=sample_image,
         proc=proc,
         fake_comfy=fake,
     )
+    return server, temp_dir
+
+
+@pytest.fixture(scope="session")
+def queue_server() -> QueueServer:
+    server, temp_dir = _start_queue_server(PROJECT_ROOT / "workflow_defs_v2")
 
     try:
         def _up() -> bool:
@@ -240,3 +247,36 @@ def queue_server() -> QueueServer:
     finally:
         server.stop()
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.fixture
+def queue_server_factory():
+    created: list[tuple[QueueServer, Path]] = []
+
+    def _factory(extra_workflow_defs: dict[str, str] | None = None) -> QueueServer:
+        temp_defs_root = Path(tempfile.mkdtemp(prefix="video_queue_defs_"))
+        defs_dir = temp_defs_root / "workflow_defs_v2"
+        shutil.copytree(PROJECT_ROOT / "workflow_defs_v2", defs_dir)
+        for name, body in (extra_workflow_defs or {}).items():
+            (defs_dir / name).write_text(body, encoding="utf-8")
+
+        server, temp_dir = _start_queue_server(defs_dir)
+
+        def _up() -> bool:
+            try:
+                health = server.request("GET", "/api/health")
+                return bool(health)
+            except Exception:
+                return False
+
+        server.wait_until(_up, timeout=25, step=0.25)
+        created.append((server, temp_dir))
+        return server
+
+    try:
+        yield _factory
+    finally:
+        for server, temp_dir in reversed(created):
+            server.stop()
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            shutil.rmtree(server.workflow_defs_dir.parent, ignore_errors=True)

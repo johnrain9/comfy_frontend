@@ -12,7 +12,12 @@ from typing import Any
 
 from db import QueueDB
 from defs import load_all
-from prompt_builder import build_prompts, resolve_params
+from services.job_service import (
+    enqueue_job,
+    get_workflow_or_error,
+    prepare_prompt_specs,
+    validate_batch_input_dir,
+)
 
 
 DEFAULT_API = os.environ.get("VIDEO_QUEUE_API", "http://127.0.0.1:8585")
@@ -48,21 +53,15 @@ def parse_params(items: list[str]) -> dict[str, Any]:
 
 def local_submit(workflow_name: str, input_dir: str, params: dict[str, Any], dry_run: bool) -> int:
     workflows = {w.name: w for w in load_all(DEFS_DIR)}
-    wf = workflows.get(workflow_name)
-    if not wf:
-        raise ValueError(f"unknown workflow: {workflow_name}")
-
-    src = Path(input_dir).expanduser().resolve()
-    if not src.exists() or not src.is_dir():
-        raise ValueError(f"input directory not found: {src}")
-
-    allowed = {e.lower() for e in wf.input_extensions}
-    files = sorted([p for p in src.iterdir() if p.is_file() and p.suffix.lower() in allowed])
-    if not files:
-        raise ValueError(f"no matching files in {src}")
-
-    resolved = resolve_params(wf, params)
-    specs = build_prompts(wf, files, resolved, comfy_input_dir=COMFY_INPUT_DIR)
+    wf = get_workflow_or_error(workflows, workflow_name)
+    normalized_input_dir, files = validate_batch_input_dir(wf, input_dir)
+    resolved, specs = prepare_prompt_specs(
+        wf,
+        files,
+        params,
+        comfy_input_dir=COMFY_INPUT_DIR,
+        stage_inputs=not dry_run,
+    )
 
     if dry_run:
         for i, spec in enumerate(specs, 1):
@@ -71,13 +70,14 @@ def local_submit(workflow_name: str, input_dir: str, params: dict[str, Any], dry
         return 0
 
     db = QueueDB(ROOT / "data" / "queue.db")
-    job_id = db.create_job(
-        workflow_name=wf.name,
-        job_name=None,
-        input_dir=str(src),
+    job_id = enqueue_job(
+        db,
+        workflow=wf,
+        input_dir=normalized_input_dir,
         params_json=resolved,
         prompt_specs=specs,
         priority=0,
+        job_name=None,
         move_processed=wf.move_processed,
     )
     print(job_id)

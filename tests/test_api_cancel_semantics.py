@@ -3,6 +3,7 @@ from __future__ import annotations
 
 def test_cancel_immediate_and_idempotent_for_pending(queue_server):
     queue_server.fake_comfy.set_complete_after(50)
+    queue_server.request("POST", "/api/queue/clear")
     queue_server.request("POST", "/api/queue/pause")
 
     job = queue_server.request(
@@ -36,7 +37,8 @@ def test_cancel_immediate_and_idempotent_for_pending(queue_server):
 
 def test_cancel_after_current_when_running_prompt_exists(queue_server):
     queue_server.fake_comfy.set_complete_after(6)
-    queue_server.request("POST", "/api/queue/resume")
+    queue_server.request("POST", "/api/queue/clear")
+    queue_server.request("POST", "/api/queue/pause")
 
     job = queue_server.request(
         "POST",
@@ -49,6 +51,8 @@ def test_cancel_after_current_when_running_prompt_exists(queue_server):
         expected=201,
     )
     job_id = int(job["job_id"])
+
+    queue_server.request("POST", "/api/queue/resume")
 
     def _has_running_and_pending() -> bool:
         detail = queue_server.request("GET", f"/api/jobs/{job_id}")

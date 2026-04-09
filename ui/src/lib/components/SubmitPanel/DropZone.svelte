@@ -123,29 +123,30 @@
 
 <style>
   .dz {
-    border: 1px dashed #39537c;
-    border-radius: 10px;
-    padding: 12px;
+    border: 1px dashed rgba(201, 144, 76, 0.32);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
     text-align: center;
-    color: #9bb2d3;
+    color: var(--color-text-secondary);
     display: grid;
-    gap: 8px;
+    gap: 0.7rem;
     justify-items: center;
+    background:
+      radial-gradient(circle at top, rgba(201, 144, 76, 0.1), transparent 54%),
+      rgba(255, 255, 255, 0.02);
   }
   .dz.disabled {
     opacity: 0.55;
   }
   .title {
-    font-size: 12px;
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
   }
   .browse {
-    border: 1px solid #2f4a72;
-    background: #13253f;
-    color: #e7efff;
-    border-radius: 8px;
-    padding: 4px 9px;
+    border-radius: var(--radius-full);
+    padding: 0.52rem 0.85rem;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 0.78rem;
   }
   .browse:disabled {
     cursor: default;
@@ -154,30 +155,30 @@
     display: none;
   }
   .thumbs {
-    margin-top: 2px;
+    margin-top: 0.1rem;
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 0.45rem;
     justify-content: center;
     width: 100%;
   }
   .hint {
-    font-size: 11px;
-    color: #8ba6cb;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
   }
   .pill {
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 999px;
-    border: 1px solid #2f4a72;
-    color: #c6d7f3;
+    font-size: 0.72rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--color-line);
+    color: var(--color-text-secondary);
   }
   .thumb {
     width: 58px;
     height: 58px;
     object-fit: cover;
-    border-radius: 7px;
-    border: 1px solid #2f4a72;
-    background: #081120;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-line);
+    background: rgba(0, 0, 0, 0.22);
   }
 </style>

@@ -1,2 +1,7 @@
-wan-context-2stage	image	ContextWindow2 workflow with first-pass + refine-pass generation
-wan-context-lite-2stage	image	Single 81-frame pass with high/low noise samplers and selectable LoRAs
+image-gen-flux-img2img	image	Image-to-image FLUX workflow using flux_img2img_fluxedup_gguf_clean template
+upscale-images-i2v	image	Batch AI-upscale source images before WAN I2V (ESRNet/ESRGAN)
+upscale-interpolate-only	video	Batch video upscale or interpolation using switchable mode
+wan-context-2stage-split-prompts	image	ContextWindow2 workflow with separate stage-1 and stage-2 prompts + up to 2 optional extra LoRAs
+wan-context-2stage	image	ContextWindow2 workflow with first-pass + refine-pass generation + up to 2 optional extra LoRAs
+wan-context-3stage-split-prompts	image	ContextWindow2 workflow with 3 passes and separate stage prompts + up to 2 optional extra LoRAs
+wan-context-lite-2stage	image	Single 81-frame pass rebuilt from ContextWindow2 base with fixed 4-step LoRA and up to 2 optional extra LoRA slots

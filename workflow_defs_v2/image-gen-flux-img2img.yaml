@@ -3,7 +3,7 @@ display_name: "FLUX Img2Img (FluxedUp GGUF)"
 group: "Image Gen"
 category: "image_gen"
 description: "Image-to-image FLUX workflow using flux_img2img_fluxedup_gguf_clean template"
-template: /home/cobra/video_queue/workflow_defs_v2/templates/flux_img2img_fluxedup_gguf_clean.api.json
+template: templates/flux_img2img_fluxedup_gguf_clean.api.json
 input_type: image
 input_extensions: [.png, .jpg, .jpeg, .webp, .bmp]
 

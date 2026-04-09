@@ -75,9 +75,12 @@ Compatibility constraints:
   - `x-filename: string`
   - `x-subdir: string`
 - Body: raw bytes
-- Response: `{ path: string; dir: string }`
+- Response: `{ path: string; dir: string; original_filename?: string }`
 - Errors:
   - `400` with `{"detail": string}` for unsupported extension, empty file, invalid subdir
+- Naming behavior:
+  - preserves a sanitized version of the original filename when unused
+  - appends deterministic suffixes like `__2`, `__3` on collision instead of timestamp prefixes
 
 ### `POST /api/jobs`
 - Purpose: submit one or split-many jobs.

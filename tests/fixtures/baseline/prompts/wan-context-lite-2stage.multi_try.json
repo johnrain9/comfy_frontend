@@ -202,8 +202,8 @@
       },
       "101": {
         "inputs": {
-          "lora_name": "lite_high.safetensors",
-          "strength_model": 0.85,
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "strength_model": 1,
           "model": [
             "95",
             0
@@ -216,8 +216,8 @@
       },
       "102": {
         "inputs": {
-          "lora_name": "lite_low.safetensors",
-          "strength_model": 0.85,
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "strength_model": 1,
           "model": [
             "96",
             0
@@ -232,7 +232,7 @@
         "inputs": {
           "shift": 5.000000000000001,
           "model": [
-            "102",
+            "202",
             0
           ]
         },
@@ -245,7 +245,7 @@
         "inputs": {
           "shift": 5.000000000000001,
           "model": [
-            "101",
+            "201",
             0
           ]
         },
@@ -267,6 +267,62 @@
         "class_type": "SaveVideo",
         "_meta": {
           "title": "Save Video"
+        }
+      },
+      "201": {
+        "inputs": {
+          "lora_name": "lite_high.safetensors",
+          "strength_model": 0.85,
+          "model": [
+            "101",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra)"
+        }
+      },
+      "202": {
+        "inputs": {
+          "lora_name": "lite_low.safetensors",
+          "strength_model": 0.85,
+          "model": [
+            "102",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra)"
+        }
+      },
+      "211": {
+        "inputs": {
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "strength_model": 0.0,
+          "model": [
+            "201",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra 2)"
+        }
+      },
+      "212": {
+        "inputs": {
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "strength_model": 0.0,
+          "model": [
+            "202",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra 2)"
         }
       }
     }
@@ -474,8 +530,8 @@
       },
       "101": {
         "inputs": {
-          "lora_name": "lite_high.safetensors",
-          "strength_model": 0.85,
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "strength_model": 1,
           "model": [
             "95",
             0
@@ -488,8 +544,8 @@
       },
       "102": {
         "inputs": {
-          "lora_name": "lite_low.safetensors",
-          "strength_model": 0.85,
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "strength_model": 1,
           "model": [
             "96",
             0
@@ -504,7 +560,7 @@
         "inputs": {
           "shift": 5.000000000000001,
           "model": [
-            "102",
+            "202",
             0
           ]
         },
@@ -517,7 +573,7 @@
         "inputs": {
           "shift": 5.000000000000001,
           "model": [
-            "101",
+            "201",
             0
           ]
         },
@@ -539,6 +595,62 @@
         "class_type": "SaveVideo",
         "_meta": {
           "title": "Save Video"
+        }
+      },
+      "201": {
+        "inputs": {
+          "lora_name": "lite_high.safetensors",
+          "strength_model": 0.85,
+          "model": [
+            "101",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra)"
+        }
+      },
+      "202": {
+        "inputs": {
+          "lora_name": "lite_low.safetensors",
+          "strength_model": 0.85,
+          "model": [
+            "102",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra)"
+        }
+      },
+      "211": {
+        "inputs": {
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "strength_model": 0.0,
+          "model": [
+            "201",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra 2)"
+        }
+      },
+      "212": {
+        "inputs": {
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "strength_model": 0.0,
+          "model": [
+            "202",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra 2)"
         }
       }
     }
@@ -746,8 +858,8 @@
       },
       "101": {
         "inputs": {
-          "lora_name": "lite_high.safetensors",
-          "strength_model": 0.85,
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "strength_model": 1,
           "model": [
             "95",
             0
@@ -760,8 +872,8 @@
       },
       "102": {
         "inputs": {
-          "lora_name": "lite_low.safetensors",
-          "strength_model": 0.85,
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "strength_model": 1,
           "model": [
             "96",
             0
@@ -776,7 +888,7 @@
         "inputs": {
           "shift": 5.000000000000001,
           "model": [
-            "102",
+            "202",
             0
           ]
         },
@@ -789,7 +901,7 @@
         "inputs": {
           "shift": 5.000000000000001,
           "model": [
-            "101",
+            "201",
             0
           ]
         },
@@ -811,6 +923,62 @@
         "class_type": "SaveVideo",
         "_meta": {
           "title": "Save Video"
+        }
+      },
+      "201": {
+        "inputs": {
+          "lora_name": "lite_high.safetensors",
+          "strength_model": 0.85,
+          "model": [
+            "101",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra)"
+        }
+      },
+      "202": {
+        "inputs": {
+          "lora_name": "lite_low.safetensors",
+          "strength_model": 0.85,
+          "model": [
+            "102",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra)"
+        }
+      },
+      "211": {
+        "inputs": {
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "strength_model": 0.0,
+          "model": [
+            "201",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra 2)"
+        }
+      },
+      "212": {
+        "inputs": {
+          "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "strength_model": 0.0,
+          "model": [
+            "202",
+            0
+          ]
+        },
+        "class_type": "LoraLoaderModelOnly",
+        "_meta": {
+          "title": "LoraLoaderModelOnly (Extra 2)"
         }
       }
     }

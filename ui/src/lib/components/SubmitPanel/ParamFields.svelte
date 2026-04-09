@@ -81,25 +81,27 @@
 <style>
   .grid {
     display: grid;
-    gap: 8px;
+    gap: 0.9rem;
   }
   .field {
     display: grid;
-    gap: 4px;
-    font-size: 13px;
-    color: #c7d8f2;
+    gap: 0.4rem;
+    font-size: 0.86rem;
+    color: var(--color-text-secondary);
   }
   .n {
-    color: #8ba6cb;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 11px;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
   }
   input,
   textarea {
-    background: #0a1322;
-    color: #e7efff;
-    border: 1px solid #2f4a72;
-    border-radius: 8px;
-    padding: 6px;
+    color: var(--color-text);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 0.85rem;
+  }
+  textarea {
+    min-height: 4.8rem;
+    resize: vertical;
   }
 </style>

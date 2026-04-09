@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import copy
 import random
+import struct
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from defs import ParameterDef, WorkflowDef
@@ -145,6 +146,160 @@ def _apply_resolution(prompt: dict[str, Any], width: int, height: int) -> None:
         inputs["height"] = int(height)
 
 
+def _read_png_size(path: Path) -> tuple[int, int] | None:
+    with path.open("rb") as fh:
+        header = fh.read(24)
+    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR":
+        return None
+    width, height = struct.unpack(">II", header[16:24])
+    return (int(width), int(height))
+
+
+def _read_gif_size(path: Path) -> tuple[int, int] | None:
+    with path.open("rb") as fh:
+        header = fh.read(10)
+    if len(header) < 10 or header[:6] not in (b"GIF87a", b"GIF89a"):
+        return None
+    width, height = struct.unpack("<HH", header[6:10])
+    return (int(width), int(height))
+
+
+def _read_bmp_size(path: Path) -> tuple[int, int] | None:
+    with path.open("rb") as fh:
+        header = fh.read(26)
+    if len(header) < 26 or header[:2] != b"BM":
+        return None
+    dib_size = struct.unpack("<I", header[14:18])[0]
+    if dib_size < 12:
+        return None
+    if dib_size >= 40:
+        width, height = struct.unpack("<ii", header[18:26])
+        return (abs(int(width)), abs(int(height)))
+    width, height = struct.unpack("<HH", header[18:22])
+    return (int(width), int(height))
+
+
+def _read_webp_size(path: Path) -> tuple[int, int] | None:
+    with path.open("rb") as fh:
+        header = fh.read(40)
+    if len(header) < 16 or header[:4] != b"RIFF" or header[8:12] != b"WEBP":
+        return None
+    chunk = header[12:16]
+    if chunk == b"VP8X" and len(header) >= 30:
+        width = 1 + int.from_bytes(header[24:27], "little")
+        height = 1 + int.from_bytes(header[27:30], "little")
+        return (width, height)
+    if chunk == b"VP8 " and len(header) >= 30 and header[23:26] == b"\x9d\x01\x2a":
+        width, height = struct.unpack("<HH", header[26:30])
+        return (width & 0x3FFF, height & 0x3FFF)
+    if chunk == b"VP8L" and len(header) >= 25 and header[20] == 0x2F:
+        bits = int.from_bytes(header[21:25], "little")
+        width = (bits & 0x3FFF) + 1
+        height = ((bits >> 14) & 0x3FFF) + 1
+        return (width, height)
+    return None
+
+
+def _read_jpeg_size(path: Path) -> tuple[int, int] | None:
+    with path.open("rb") as fh:
+        if fh.read(2) != b"\xFF\xD8":
+            return None
+        while True:
+            prefix = fh.read(1)
+            if not prefix:
+                return None
+            if prefix != b"\xFF":
+                continue
+            marker = fh.read(1)
+            while marker == b"\xFF":
+                marker = fh.read(1)
+            if not marker or marker in (b"\xD8", b"\xD9"):
+                return None
+            if marker in (b"\x01",) or 0xD0 <= marker[0] <= 0xD7:
+                continue
+            length_raw = fh.read(2)
+            if len(length_raw) < 2:
+                return None
+            segment_length = struct.unpack(">H", length_raw)[0]
+            if segment_length < 2:
+                return None
+            if marker[0] in {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}:
+                sof = fh.read(5)
+                if len(sof) < 5:
+                    return None
+                height, width = struct.unpack(">HH", sof[1:5])
+                return (int(width), int(height))
+            fh.seek(segment_length - 2, 1)
+
+
+def _read_image_size(path: Path) -> tuple[int, int] | None:
+    try:
+        suffix = path.suffix.lower()
+        if suffix == ".png":
+            return _read_png_size(path)
+        if suffix in {".jpg", ".jpeg"}:
+            return _read_jpeg_size(path)
+        if suffix == ".webp":
+            return _read_webp_size(path)
+        if suffix == ".bmp":
+            return _read_bmp_size(path)
+        if suffix == ".gif":
+            return _read_gif_size(path)
+    except Exception:
+        return None
+    return None
+
+
+def _rounded_multiple(value: float, multiple: int = 16) -> int:
+    return max(multiple, int(round(value / multiple) * multiple))
+
+
+def _apply_scale_multiple_dimensions(
+    prompt: dict[str, Any],
+    workflow_def: WorkflowDef,
+    file_path: Path | None,
+    resolved_params: dict[str, Any],
+    raw_params: dict[str, Any],
+) -> None:
+    if file_path is None or "scale_multiple" not in workflow_def.parameters:
+        return
+    if "width" in raw_params or "height" in raw_params:
+        return
+
+    dims = _read_image_size(file_path)
+    if dims is None:
+        return
+
+    src_w, src_h = dims
+    scale_multiple = float(resolved_params.get("scale_multiple", 1.0) or 1.0)
+    width = _rounded_multiple(src_w * scale_multiple)
+    height = _rounded_multiple(src_h * scale_multiple)
+
+    width_def = workflow_def.parameters.get("width")
+    height_def = workflow_def.parameters.get("height")
+    if width_def:
+        if width_def.min is not None:
+            width = max(int(width_def.min), width)
+        if width_def.max is not None:
+            width = min(int(width_def.max), width)
+    if height_def:
+        if height_def.min is not None:
+            height = max(int(height_def.min), height)
+        if height_def.max is not None:
+            height = min(int(height_def.max), height)
+
+    for pname, value in (("width", width), ("height", height)):
+        pdef = workflow_def.parameters.get(pname)
+        if not pdef or not pdef.nodes:
+            continue
+        for nid in pdef.nodes:
+            node = prompt.get(nid)
+            if not isinstance(node, dict):
+                continue
+            inputs = node.setdefault("inputs", {})
+            _set_candidate_field(inputs, pdef.field, pdef.fields, value)
+
+
 
 def _resolve_for_comfy_input(file_path: Path, comfy_input_dir: Path | None) -> str:
     if comfy_input_dir is None:
@@ -182,12 +337,28 @@ def _set_seed(prompt: dict[str, Any], workflow_def: WorkflowDef, randomize: bool
 
 
 
+def _normalize_output_prefix(output_prefix: str) -> str:
+    raw = str(output_prefix or "").strip()
+    if not raw:
+        return ""
+
+    normalized = raw.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    home_path = PurePosixPath(str(Path.home()).replace("\\", "/"))
+
+    if path.is_absolute() and len(path.parts) >= len(home_path.parts) and path.parts[: len(home_path.parts)] == home_path.parts:
+        path = PurePosixPath(*path.parts[len(home_path.parts) :])
+
+    parts = [part for part in path.parts if part not in ("", "/", ".", "..")]
+    return PurePosixPath(*parts).as_posix() if parts else ""
+
+
 def _set_output_prefix(prompt: dict[str, Any], workflow_def: WorkflowDef, output_prefix: str, stem: str) -> str:
     binding = workflow_def.file_bindings.get("output_prefix")
     if not binding:
         return stem
 
-    base = output_prefix.rstrip("/")
+    base = _normalize_output_prefix(output_prefix)
     final = f"{base}/{stem}" if base else stem
     for nid in binding.nodes:
         node = prompt.get(nid)
@@ -324,6 +495,7 @@ def build_prompts(
     resolution: tuple[int, int] | None = None,
     flip_orientation: bool = False,
 ) -> list[PromptSpec]:
+    raw_params = dict(params or {})
     comfy_input = Path(comfy_input_dir).expanduser().resolve() if comfy_input_dir else None
     paths: list[Path | None]
     if input_files:
@@ -356,6 +528,7 @@ def build_prompts(
             if rel_input is not None:
                 _apply_input_binding(prompt, workflow_def, rel_input)
             _apply_param_overrides(prompt, workflow_def, effective)
+            _apply_scale_multiple_dimensions(prompt, workflow_def, file_path, effective, raw_params)
             _apply_switch_states(prompt, workflow_def)
             _normalize_context_schedule_values(prompt)
             if resolution is not None:
