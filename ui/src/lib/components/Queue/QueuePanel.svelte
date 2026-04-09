@@ -163,7 +163,7 @@
         <span>Clear the search or submit a new run to populate the board.</span>
       </div>
     {:else}
-      {#each shownRows as j}
+      {#each shownRows as j (j.id)}
         <div class="sel-row">
           <div class="check-wrap">
             <input

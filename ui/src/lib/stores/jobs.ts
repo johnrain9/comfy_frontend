@@ -1,9 +1,19 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { api } from '$lib/api';
 import type { JobListItem } from '$lib/types';
 
 export const jobs = writable<JobListItem[]>([]);
 export const jobsError = writable('');
+
+let lastFingerprint = '';
+
+function fingerprint(data: JobListItem[]): string {
+  let s = '';
+  for (const j of data) {
+    s += `${j.id}:${j.status}:${j.prompt_count}:${j.succeeded_count}:${j.failed_count}:${j.canceled_count}:${j.running_count}:${j.pending_count};`;
+  }
+  return s;
+}
 
 const DEFAULT_INTERVAL_MS = 2500;
 const MAX_BACKOFF_MS = 15000;
@@ -60,7 +70,11 @@ async function pollOnce(force: boolean): Promise<void> {
     });
 
     if (requestId !== activeRequestId) return;
-    jobs.set(data);
+    const fp = fingerprint(data);
+    if (fp !== lastFingerprint) {
+      lastFingerprint = fp;
+      jobs.set(data);
+    }
     jobsError.set('');
     failureCount = 0;
   } catch (e) {

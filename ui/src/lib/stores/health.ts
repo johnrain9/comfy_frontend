@@ -5,6 +5,8 @@ import type { HealthResponse } from '$lib/types';
 export const health = writable<HealthResponse | null>(null);
 export const healthError = writable('');
 
+let lastHealthJson = '';
+
 const DEFAULT_INTERVAL_MS = 3000;
 const MAX_BACKOFF_MS = 20000;
 const REQUEST_TIMEOUT_MS = 12000;
@@ -60,7 +62,11 @@ async function pollOnce(force: boolean): Promise<void> {
     });
 
     if (requestId !== activeRequestId) return;
-    health.set(data);
+    const json = JSON.stringify(data);
+    if (json !== lastHealthJson) {
+      lastHealthJson = json;
+      health.set(data);
+    }
     healthError.set('');
     failureCount = 0;
   } catch (e) {
