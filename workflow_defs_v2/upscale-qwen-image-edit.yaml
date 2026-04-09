@@ -19,17 +19,11 @@ template_inline:
     class_type: UnetLoaderGGUF
     inputs:
       unet_name: "Qwen/qwen-image-edit-2511-Q4_K_M.gguf"
-  "4":
-    class_type: LoraLoaderModelOnly
-    inputs:
-      lora_name: "Qwen/Qwen-Image-Lightning-8steps-V2.0-r32.safetensors"
-      strength_model: 1
-      model: ["3", 0]
   "5":
     class_type: ModelSamplingAuraFlow
     inputs:
       shift: 3
-      model: ["4", 0]
+      model: ["3", 0]
   "6":
     class_type: CFGNorm
     inputs:
@@ -40,7 +34,7 @@ template_inline:
     inputs:
       clip_name: "Qwen/qwen_2.5_vl_7b_fp8_scaled.safetensors"
       type: "qwen_image"
-      device: "default"
+      device: "cpu"
   "8":
     class_type: VAELoader
     inputs:
@@ -48,14 +42,14 @@ template_inline:
   "10":
     class_type: TextEncodeQwenImageEditPlus
     inputs:
-      prompt: "preserve the same person and identity, same face, same eyes, same nose, same mouth, same hairline, same body proportions, realistic professional photo, natural skin texture, natural lighting, preserve original composition and pose, restore fine detail, remove blur and compression artifacts"
+      prompt: "Enhance this photo while keeping the same person, same face, same body proportions, same pose, same framing, and same background. Preserve identity and realism. Improve sharpness, natural skin texture, fine hair detail, and clean photographic detail. Remove blur, noise, and compression artifacts. Keep it as a realistic professional photo."
       clip: ["7", 0]
       vae: ["8", 0]
       image1: ["2", 0]
   "11":
     class_type: TextEncodeQwenImageEditPlus
     inputs:
-      prompt: "low quality, blurry, distorted, duplicate, distorted limbs, extra limbs, deformed hands, poor lighting, pixelated, grainy, oversaturated, overexposed, underexposed, low resolution, artifacts, noise, watermark, logo, cartoon, plastic skin, beauty filter, glamor retouch, airbrushed skin, doll-like face, stylized face, changed identity, different person"
+      prompt: "Do not change identity, face shape, eyes, nose, mouth, body shape, pose, framing, clothing, or background. No stylization, no beauty filter, no airbrushed skin, no cartoon look, no plastic skin, no glamor retouch, no oversmoothing, no extra limbs, no deformation, no text, no watermark."
       clip: ["7", 0]
       vae: ["8", 0]
       image1: ["2", 0]
@@ -80,11 +74,11 @@ template_inline:
     inputs:
       seed: 0
       control_after_generate: "randomize"
-      steps: 12
+      steps: 8
       cfg: 1.2
       sampler_name: "euler"
       scheduler: "simple"
-      denoise: 0.65
+      denoise: 1.0
       model: ["6", 0]
       positive: ["12", 0]
       negative: ["13", 0]
@@ -117,11 +111,11 @@ parameters:
     type: text
     nodes: ["10"]
     field: prompt
-    default: "preserve the same person and identity, same face, same eyes, same nose, same mouth, same hairline, same body proportions, realistic professional photo, natural skin texture, natural lighting, preserve original composition and pose, restore fine detail, remove blur and compression artifacts"
+    default: "Enhance this photo while keeping the same person, same face, same body proportions, same pose, same framing, and same background. Preserve identity and realism. Improve sharpness, natural skin texture, fine hair detail, and clean photographic detail. Remove blur, noise, and compression artifacts. Keep it as a realistic professional photo."
   scale_multiple:
     label: "Scale multiple"
     type: float
-    default: 1.5
+    default: 1.0
     min: 1.0
     max: 3.0
   negative_prompt:
@@ -129,7 +123,7 @@ parameters:
     type: text
     nodes: ["11"]
     field: prompt
-    default: "low quality, blurry, distorted, duplicate, distorted limbs, extra limbs, deformed hands, poor lighting, pixelated, grainy, oversaturated, overexposed, underexposed, low resolution, artifacts, noise, watermark, logo, cartoon, plastic skin, beauty filter, glamor retouch, airbrushed skin, doll-like face, stylized face, changed identity, different person"
+    default: "Do not change identity, face shape, eyes, nose, mouth, body shape, pose, framing, clothing, or background. No stylization, no beauty filter, no airbrushed skin, no cartoon look, no plastic skin, no glamor retouch, no oversmoothing, no extra limbs, no deformation, no text, no watermark."
   width:
     label: "Output width"
     type: int
@@ -151,7 +145,7 @@ parameters:
     type: int
     nodes: ["15"]
     field: steps
-    default: 12
+    default: 8
     min: 4
     max: 50
   cfg:
@@ -167,7 +161,7 @@ parameters:
     type: float
     nodes: ["15"]
     field: denoise
-    default: 0.65
+    default: 1.0
     min: 0.1
     max: 1.0
   output_prefix:
