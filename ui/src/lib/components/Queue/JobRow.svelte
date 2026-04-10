@@ -173,14 +173,11 @@
     padding: 1rem 1.05rem;
     border: 1px solid var(--color-line);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 100%),
-      rgba(13, 16, 21, 0.8);
+    background: #0e1117;
     cursor: pointer;
     box-shadow: var(--shadow-soft);
   }
   .job:hover {
-    transform: translateY(-2px);
     border-color: var(--color-line-strong);
   }
   .job:focus-visible {

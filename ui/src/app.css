@@ -7,10 +7,10 @@
   --font-sans: 'DM Sans', 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', monospace;
   --color-bg-app: #090b0f;
-  --color-bg-panel: rgba(17, 21, 27, 0.88);
-  --color-bg-panel-strong: rgba(23, 28, 36, 0.94);
-  --color-bg-panel-soft: rgba(255, 255, 255, 0.03);
-  --color-bg-input: rgba(12, 15, 20, 0.94);
+  --color-bg-panel: #11151b;
+  --color-bg-panel-strong: #171c24;
+  --color-bg-panel-soft: #0f1217;
+  --color-bg-input: #0c0f14;
   --color-line: rgba(241, 233, 220, 0.12);
   --color-line-strong: rgba(241, 233, 220, 0.22);
   --color-text: #f2ede4;
@@ -43,29 +43,10 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(199, 144, 76, 0.2), transparent 30%),
-    radial-gradient(circle at 82% 8%, rgba(89, 104, 138, 0.18), transparent 26%),
-    linear-gradient(180deg, #11141a 0%, var(--color-bg-app) 44%, #06070a 100%);
+  background: var(--color-bg-app);
   color: var(--color-text);
   font-family: var(--font-sans);
   letter-spacing: -0.01em;
-}
-
-body::before,
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-}
-
-body::before {
-  display: none;
-}
-
-body::after {
-  display: none;
 }
 
 a {
@@ -110,7 +91,6 @@ textarea:focus-visible {
 
 button:hover:not(:disabled) {
   border-color: var(--color-line-strong);
-  transform: translateY(-1px);
 }
 
 button:disabled {
@@ -126,12 +106,9 @@ pre,
 }
 
 .panel {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 100%),
-    var(--color-bg-panel-strong);
+  background: var(--color-bg-panel-strong);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-panel);
 }
 
 .eyebrow {

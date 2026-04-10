@@ -241,8 +241,7 @@
     gap: 0.7rem;
   }
   .queue-column :global(#queuePanel) {
-    position: sticky;
-    top: 1.25rem;
+    position: static;
   }
 
   @media (max-width: 1200px) {
