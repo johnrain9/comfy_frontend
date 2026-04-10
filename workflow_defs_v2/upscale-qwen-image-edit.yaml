@@ -18,6 +18,7 @@ template_inline:
   "3":
     class_type: UnetLoaderGGUF
     inputs:
+      # Stable baseline: Q4 GGUF + no LoRA; PQ presets only vary CFG.
       unet_name: "Qwen/qwen-image-edit-2511-Q4_K_M.gguf"
   "5":
     class_type: ModelSamplingAuraFlow
@@ -34,6 +35,7 @@ template_inline:
     inputs:
       clip_name: "Qwen/qwen_2.5_vl_7b_fp8_scaled.safetensors"
       type: "qwen_image"
+      # Keep the VL encoder on CPU to avoid encode-time VRAM OOMs.
       device: "cpu"
   "8":
     class_type: VAELoader
@@ -74,8 +76,9 @@ template_inline:
     inputs:
       seed: 0
       control_after_generate: "randomize"
+      # Stable baseline from recent successful PQ runs.
       steps: 8
-      cfg: 1.2
+      cfg: 1.0
       sampler_name: "euler"
       scheduler: "simple"
       denoise: 1.0
@@ -153,7 +156,7 @@ parameters:
     type: float
     nodes: ["15"]
     field: cfg
-    default: 1.2
+    default: 1.0
     min: 1.0
     max: 10.0
   denoise:
