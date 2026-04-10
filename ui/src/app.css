@@ -61,12 +61,7 @@ body::after {
 }
 
 body::before {
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 65%);
-  opacity: 0.22;
+  display: none;
 }
 
 body::after {
@@ -138,11 +133,10 @@ pre,
 .panel {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 100%),
-    var(--color-bg-panel);
+    var(--color-bg-panel-strong);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(16px);
 }
 
 .eyebrow {

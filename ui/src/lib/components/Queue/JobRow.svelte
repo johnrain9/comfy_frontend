@@ -281,11 +281,9 @@
   .fill {
     background: linear-gradient(90deg, var(--color-accent), var(--color-accent-strong));
     height: 100%;
-    box-shadow: 0 0 20px rgba(201, 144, 76, 0.36);
   }
   .fill.fill-failed {
     background: linear-gradient(90deg, rgba(216, 118, 134, 0.6), rgba(216, 118, 134, 0.85));
-    box-shadow: 0 0 20px rgba(216, 118, 134, 0.26);
   }
   .summary-error {
     padding: 0.75rem 0.85rem;
