@@ -254,6 +254,52 @@ def _rounded_multiple(value: float, multiple: int = 16) -> int:
     return max(multiple, int(round(value / multiple) * multiple))
 
 
+def _aspect_preserving_bounded_dims(
+    src_w: int,
+    src_h: int,
+    scale_multiple: float,
+    width_def: ParameterDef | None,
+    height_def: ParameterDef | None,
+) -> tuple[int, int]:
+    target_w = max(1.0, float(src_w) * scale_multiple)
+    target_h = max(1.0, float(src_h) * scale_multiple)
+
+    min_scale = 1.0
+    if width_def and width_def.min is not None and target_w < width_def.min:
+        min_scale = max(min_scale, float(width_def.min) / target_w)
+    if height_def and height_def.min is not None and target_h < height_def.min:
+        min_scale = max(min_scale, float(height_def.min) / target_h)
+
+    target_w *= min_scale
+    target_h *= min_scale
+
+    max_scale = 1.0
+    if width_def and width_def.max is not None and target_w > width_def.max:
+        max_scale = min(max_scale, float(width_def.max) / target_w)
+    if height_def and height_def.max is not None and target_h > height_def.max:
+        max_scale = min(max_scale, float(height_def.max) / target_h)
+
+    if max_scale < 1.0:
+        target_w *= max_scale
+        target_h *= max_scale
+
+    width = _rounded_multiple(target_w)
+    height = _rounded_multiple(target_h)
+
+    if width_def:
+        if width_def.min is not None:
+            width = max(int(width_def.min), width)
+        if width_def.max is not None:
+            width = min(int(width_def.max), width)
+    if height_def:
+        if height_def.min is not None:
+            height = max(int(height_def.min), height)
+        if height_def.max is not None:
+            height = min(int(height_def.max), height)
+
+    return width, height
+
+
 def _apply_scale_multiple_dimensions(
     prompt: dict[str, Any],
     workflow_def: WorkflowDef,
@@ -272,21 +318,9 @@ def _apply_scale_multiple_dimensions(
 
     src_w, src_h = dims
     scale_multiple = float(resolved_params.get("scale_multiple", 1.0) or 1.0)
-    width = _rounded_multiple(src_w * scale_multiple)
-    height = _rounded_multiple(src_h * scale_multiple)
-
     width_def = workflow_def.parameters.get("width")
     height_def = workflow_def.parameters.get("height")
-    if width_def:
-        if width_def.min is not None:
-            width = max(int(width_def.min), width)
-        if width_def.max is not None:
-            width = min(int(width_def.max), width)
-    if height_def:
-        if height_def.min is not None:
-            height = max(int(height_def.min), height)
-        if height_def.max is not None:
-            height = min(int(height_def.max), height)
+    width, height = _aspect_preserving_bounded_dims(src_w, src_h, scale_multiple, width_def, height_def)
 
     for pname, value in (("width", width), ("height", height)):
         pdef = workflow_def.parameters.get(pname)

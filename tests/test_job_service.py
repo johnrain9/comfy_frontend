@@ -183,3 +183,23 @@ def test_prepare_prompt_specs_qwen_upscale_derives_dimensions_from_scale_multipl
     prompt = specs[0].prompt_json
     assert prompt["14"]["inputs"]["width"] == 864
     assert prompt["14"]["inputs"]["height"] == 1536
+
+
+def test_prepare_prompt_specs_qwen_upscale_preserves_aspect_when_min_size_applies(tmp_path, workflows):
+    wf = workflows["upscale-qwen-image-edit"]
+    comfy_input_dir = tmp_path / "comfy" / "input"
+    comfy_input_dir.mkdir(parents=True, exist_ok=True)
+    image = tmp_path / "small-portrait.png"
+    _write_png(image, 447, 500)
+
+    _, specs = prepare_prompt_specs(
+        wf,
+        [image],
+        {"scale_multiple": 1.0},
+        comfy_input_dir=comfy_input_dir,
+        stage_inputs=True,
+    )
+
+    prompt = specs[0].prompt_json
+    assert prompt["14"]["inputs"]["width"] == 512
+    assert prompt["14"]["inputs"]["height"] == 576

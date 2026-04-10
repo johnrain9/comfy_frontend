@@ -76,8 +76,8 @@ template_inline:
     inputs:
       seed: 0
       control_after_generate: "randomize"
-      # Stable baseline from recent successful PQ runs.
-      steps: 8
+      # Stable baseline: Q4/no-LoRA/CPU-CLIP with 12 steps.
+      steps: 12
       cfg: 1.0
       sampler_name: "euler"
       scheduler: "simple"
@@ -148,7 +148,7 @@ parameters:
     type: int
     nodes: ["15"]
     field: steps
-    default: 8
+    default: 12
     min: 4
     max: 50
   cfg:
