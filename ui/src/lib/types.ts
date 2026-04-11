@@ -53,6 +53,8 @@ export interface JobListItem {
   failed_count: number;
   canceled_count: number;
   prompt_count: number;
+  input_dir: string | null;
+  params_json: string | null;
 }
 
 export interface JobPromptRow {

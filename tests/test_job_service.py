@@ -203,3 +203,45 @@ def test_prepare_prompt_specs_qwen_upscale_preserves_aspect_when_min_size_applie
     prompt = specs[0].prompt_json
     assert prompt["14"]["inputs"]["width"] == 512
     assert prompt["14"]["inputs"]["height"] == 576
+
+
+def test_prepare_prompt_specs_qwen_upscale_appends_detail_hint_to_positive_prompt(tmp_path, workflows):
+    wf = workflows["upscale-qwen-image-edit"]
+    comfy_input_dir = tmp_path / "comfy" / "input"
+    comfy_input_dir.mkdir(parents=True, exist_ok=True)
+    image = tmp_path / "detail.png"
+    _write_png(image, 800, 1200)
+
+    _, specs = prepare_prompt_specs(
+        wf,
+        [image],
+        {"prompt_hint": "remove motion blur in the face and hands"},
+        comfy_input_dir=comfy_input_dir,
+        stage_inputs=True,
+    )
+
+    prompt = specs[0].prompt_json
+    assert "Extra detail focus: remove motion blur in the face and hands" in prompt["10"]["inputs"]["prompt"]
+    assert "Do not zoom in." in prompt["11"]["inputs"]["prompt"]
+
+
+def test_prepare_prompt_specs_qwen_upscale_relaxes_prompt_for_creative_mode(tmp_path, workflows):
+    wf = workflows["upscale-qwen-image-edit"]
+    comfy_input_dir = tmp_path / "comfy" / "input"
+    comfy_input_dir.mkdir(parents=True, exist_ok=True)
+    image = tmp_path / "creative.png"
+    _write_png(image, 800, 1200)
+
+    _, specs = prepare_prompt_specs(
+        wf,
+        [image],
+        {"prompt_mode": "creative", "prompt_hint": "make it more editorial with dramatic sunset light"},
+        comfy_input_dir=comfy_input_dir,
+        stage_inputs=True,
+    )
+
+    prompt = specs[0].prompt_json
+    assert "Creative direction: make it more editorial with dramatic sunset light" in prompt["10"]["inputs"]["prompt"]
+    assert "Allow tasteful creative reinterpretation of lighting, mood, and composition" in prompt["10"]["inputs"]["prompt"]
+    assert "Do not zoom in." not in prompt["11"]["inputs"]["prompt"]
+    assert "Do not crop any person out of frame." not in prompt["11"]["inputs"]["prompt"]

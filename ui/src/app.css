@@ -11,6 +11,8 @@
   --color-bg-panel-strong: #171c24;
   --color-bg-panel-soft: #0f1217;
   --color-bg-input: #0c0f14;
+  --color-bg-card: #1a1f2a;
+  --color-bg-inset: #0a0c10;
   --color-line: rgba(241, 233, 220, 0.12);
   --color-line-strong: rgba(241, 233, 220, 0.22);
   --color-text: #f2ede4;
@@ -109,11 +111,12 @@ pre,
   background: var(--color-bg-panel-strong);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
 }
 
 .eyebrow {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-accent);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.12em;

@@ -45,7 +45,7 @@
     padding: 0.82rem 0.92rem;
     border: 1px solid var(--color-line);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--color-bg-panel);
   }
   .status {
     display: grid;

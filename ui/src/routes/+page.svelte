@@ -5,7 +5,7 @@
   import QueuePanel from '$lib/components/Queue/QueuePanel.svelte';
   import SubmitPanel from '$lib/components/SubmitPanel/SubmitPanel.svelte';
   import { startHealthPolling, stopHealthPolling } from '$lib/stores/health';
-  import { startJobsPolling, stopJobsPolling, refreshJobs } from '$lib/stores/jobs';
+  import { startJobsPolling, stopJobsPolling, refreshJobs, jobs } from '$lib/stores/jobs';
   import { refreshWorkflows, workflows } from '$lib/stores/workflows';
   import {
     createWorkspace,
@@ -14,6 +14,9 @@
     renameWorkspace,
     closeWorkspace,
   } from '$lib/stores/workspace';
+
+  type ViewTab = 'compose' | 'queue';
+  let view: ViewTab = 'compose';
 
   onMount(async () => {
     await refreshWorkflows();
@@ -36,46 +39,51 @@
     $workspaceState.workspaces.find((ws) => ws.id === $workspaceState.active_workspace_id) ??
     $workspaceState.workspaces[0] ??
     null;
+
+  $: runningCount = $jobs.filter((j) => String(j.status).toLowerCase() === 'running').length;
+  $: failedCount = $jobs.filter((j) => String(j.status).toLowerCase() === 'failed').length;
+  $: badgeCount = runningCount + failedCount;
 </script>
 
 <svelte:head>
-  <title>Video Queue Control Room</title>
+  <title>Video Queue</title>
 </svelte:head>
 
-<main class="page-shell">
-  <header class="hero panel">
-    <div class="hero-copy">
-      <p class="eyebrow">Video Queue Control Room</p>
-      <h1>Stage jobs like a workbench. Watch the queue like a live board.</h1>
-      <p class="hero-text">
-        The left side is for preparing batches and presets. The right side stays focused on execution state,
-        failures, and throughput so the queue remains readable under load.
-      </p>
-    </div>
-    <div class="hero-meta">
-      <div class="hero-stat">
-        <span>Workspaces</span>
-        <strong>{$workspaceState.workspaces.length}</strong>
-      </div>
-      <div class="hero-stat">
-        <span>Active Desk</span>
-        <strong>{activeWorkspace?.name || 'Workspace'}</strong>
-      </div>
-    </div>
-  </header>
+<div class="app-shell">
+  <header class="top-bar">
+    <strong class="brand">VQ</strong>
 
-  <StatusBar />
+    <nav class="view-tabs" role="tablist" aria-label="Main views">
+      <button
+        role="tab"
+        aria-selected={view === 'compose'}
+        class:active={view === 'compose'}
+        on:click={() => (view = 'compose')}
+      >
+        Compose
+      </button>
+      <button
+        role="tab"
+        aria-selected={view === 'queue'}
+        class:active={view === 'queue'}
+        on:click={() => (view = 'queue')}
+      >
+        Queue
+        {#if badgeCount > 0}
+          <span class="badge" class:has-failed={failedCount > 0}>{badgeCount}</span>
+        {/if}
+      </button>
+    </nav>
 
-  <section class="workspace-strip panel" aria-label="Workspace Tabs">
-    <div class="workspace-copy">
-      <p class="eyebrow">Workspaces</p>
-      <h2 class="section-title">Keep experiments isolated.</h2>
-    </div>
-    <div class="workspace-row">
-      <div id="workspaceTabs" class="tabs" role="tablist" aria-label="Workspaces">
+    <div class="separator"></div>
+
+    <div class="ws-area">
+      <span class="ws-label">Workspace</span>
+      <div class="ws-tabs" role="tablist" aria-label="Workspaces">
         {#each $workspaceState.workspaces as ws}
           <button
             role="tab"
+            class="ws-tab"
             aria-selected={ws.id === $workspaceState.active_workspace_id}
             class:active={ws.id === $workspaceState.active_workspace_id}
             on:click={() => setActiveWorkspace(ws.id)}
@@ -84,186 +92,193 @@
           </button>
         {/each}
       </div>
-      <div class="controls">
-        <button id="newWsBtn" on:click={() => createWorkspace()}>New</button>
-        {#if $workspaceState.workspaces.length > 0}
-          {#each $workspaceState.workspaces as ws}
-            {#if ws.id === $workspaceState.active_workspace_id}
-              <button id="renameWsBtn" on:click={() => onRename(ws.id, ws.name)}>Rename</button>
-              <button id="closeWsBtn" disabled={$workspaceState.workspaces.length <= 1} on:click={() => closeWorkspace(ws.id)}>Close</button>
-            {/if}
-          {/each}
+      <div class="ws-controls">
+        <button id="newWsBtn" on:click={() => createWorkspace()}>+</button>
+        {#if activeWorkspace}
+          <button id="renameWsBtn" on:click={() => onRename(activeWorkspace.id, activeWorkspace.name)} title="Rename workspace">Ren</button>
+          <button
+            id="closeWsBtn"
+            disabled={$workspaceState.workspaces.length <= 1}
+            on:click={() => closeWorkspace(activeWorkspace.id)}
+            title="Close workspace"
+          >&times;</button>
         {/if}
       </div>
     </div>
-  </section>
+  </header>
 
-  <div class="workspace-layout">
-    <section class="submit-column">
-      <div class="column-intro">
-        <p class="eyebrow">Submission Desk</p>
-        <h2 class="section-title">Compose jobs, presets, and staged inputs.</h2>
-        <p class="section-copy">
-          Configure the workflow, attach assets, and keep prompt variations contained to the current workspace.
-        </p>
-      </div>
+  <StatusBar />
+
+  <main class="content">
+    {#if view === 'compose'}
       <SubmitPanel workflows={$workflows} onSubmitted={refreshJobs} />
-    </section>
-
-    <aside class="queue-column">
-      <div class="column-intro">
-        <p class="eyebrow">Queue Board</p>
-        <h2 class="section-title">Track the render line in real time.</h2>
-        <p class="section-copy">
-          Running jobs stay at the top, failed jobs remain visible, and details expand inline when you need the
-          full execution trail.
-        </p>
-      </div>
+    {:else}
       <QueuePanel />
-    </aside>
-  </div>
-</main>
+    {/if}
+  </main>
+</div>
 
 <style>
-  .page-shell {
-    position: relative;
-    z-index: 1;
+  .app-shell {
     display: grid;
-    gap: 1rem;
+    gap: 0.6rem;
     max-width: 1480px;
     margin: 0 auto;
-    padding: 1.25rem;
+    padding: 0.75rem 1.25rem 1.25rem;
+    min-height: 100vh;
+    grid-template-rows: auto auto 1fr;
   }
-  .hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.75fr);
-    gap: 1.25rem;
-    padding: 1.35rem 1.45rem;
-    overflow: hidden;
-  }
-  .hero-copy {
-    display: grid;
-    gap: 0.8rem;
-    align-content: start;
-  }
-  .hero-copy h1 {
-    margin: 0;
-    max-width: 12ch;
-    font-size: clamp(2.3rem, 4vw, 4.5rem);
-    line-height: 0.94;
-    letter-spacing: -0.06em;
-    font-weight: 600;
-  }
-  .hero-text {
-    margin: 0;
-    max-width: 62ch;
-    color: var(--color-text-secondary);
-    font-size: 1rem;
-    line-height: 1.55;
-  }
-  .hero-meta {
-    display: grid;
-    gap: 0.8rem;
-    align-content: end;
-  }
-  .hero-stat {
-    display: grid;
-    gap: 0.35rem;
-    padding: 1rem 1.05rem;
-    border-radius: var(--radius-md);
+
+  /* ── Top bar ── */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    background: var(--color-bg-panel-strong);
     border: 1px solid var(--color-line);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent),
-      rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+    border-top: 2px solid var(--color-accent);
   }
-  .hero-stat span {
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-  .hero-stat strong {
-    font-size: clamp(1.25rem, 2vw, 1.85rem);
-    font-weight: 600;
+
+  .brand {
+    font-size: 1.15rem;
+    font-weight: 800;
     letter-spacing: -0.04em;
+    color: var(--color-accent-strong);
+    margin-right: 0.25rem;
   }
-  .workspace-strip {
-    display: grid;
-    gap: 1rem;
-    padding: 1rem 1.2rem;
-  }
-  .workspace-copy {
-    display: grid;
+
+  /* ── View tabs (Compose / Queue) ── */
+  .view-tabs {
+    display: flex;
     gap: 0.3rem;
   }
-  .workspace-row {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: end;
-  }
-  .tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem;
-  }
-  .tabs button,
-  .controls button {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid var(--color-line);
-    color: var(--color-text-secondary);
+  .view-tabs button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
     border-radius: var(--radius-full);
-    padding: 0.62rem 0.95rem;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--color-text-muted);
+    font-size: 0.88rem;
+    font-weight: 500;
     cursor: pointer;
   }
-  .tabs button.active {
-    background: linear-gradient(180deg, rgba(201, 144, 76, 0.22), rgba(201, 144, 76, 0.08));
-    border-color: rgba(201, 144, 76, 0.45);
-    color: var(--color-text);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  .view-tabs button:hover {
+    color: var(--color-text-secondary);
   }
-  .controls {
+  .view-tabs button.active {
+    background: #2a2118;
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
+    font-weight: 700;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: var(--radius-full);
+    background: var(--color-running);
+    color: #090b0f;
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .badge.has-failed {
+    background: var(--color-failed);
+  }
+
+  .separator {
+    width: 1px;
+    height: 1.4rem;
+    background: var(--color-line-strong);
+    flex-shrink: 0;
+  }
+
+  /* ── Workspace area ── */
+  .ws-area {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
   }
-  .workspace-layout {
-    display: grid;
-    grid-template-columns: minmax(520px, 1.08fr) minmax(420px, 0.92fr);
-    gap: 1rem;
-    align-items: start;
+  .ws-label {
+    color: var(--color-text-muted);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
   }
-  .submit-column,
-  .queue-column,
-  .column-intro {
-    display: grid;
-    gap: 0.7rem;
+  .ws-tabs {
+    display: flex;
+    gap: 0.25rem;
   }
-  .queue-column :global(#queuePanel) {
-    position: static;
+  .ws-tab {
+    padding: 0.38rem 0.7rem;
+    border-radius: var(--radius-full);
+    background: transparent;
+    border: 1px solid var(--color-line);
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .ws-tab.active {
+    background: var(--color-bg-card);
+    border-color: var(--color-line-strong);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  .ws-controls {
+    display: flex;
+    gap: 0.2rem;
+  }
+  .ws-controls button {
+    width: 1.7rem;
+    height: 1.7rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--color-line);
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .ws-controls button:hover:not(:disabled) {
+    color: var(--color-text);
+    border-color: var(--color-line-strong);
   }
 
-  @media (max-width: 1200px) {
-    .workspace-layout {
-      grid-template-columns: 1fr;
-    }
-    .queue-column :global(#queuePanel) {
-      position: static;
-    }
+  /* ── Content ── */
+  .content {
+    min-width: 0;
   }
 
-  @media (max-width: 820px) {
-    .page-shell {
-      padding: 0.9rem;
+  @media (max-width: 900px) {
+    .app-shell {
+      padding: 0.5rem 0.75rem 1rem;
     }
-    .hero {
-      grid-template-columns: 1fr;
-      padding: 1.15rem;
+    .top-bar {
+      flex-wrap: wrap;
+      gap: 0.5rem;
     }
-    .hero-copy h1 {
-      max-width: none;
-      font-size: clamp(2rem, 12vw, 3rem);
+    .separator {
+      display: none;
+    }
+    .ws-area {
+      margin-left: 0;
+      width: 100%;
     }
   }
 </style>

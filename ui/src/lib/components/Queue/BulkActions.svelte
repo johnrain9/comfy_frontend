@@ -56,20 +56,15 @@
 
 <style>
   .row {
-    position: sticky;
-    bottom: 0.85rem;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.8rem;
     align-items: center;
     padding: 0.9rem 1rem;
-    border: 1px solid var(--color-line);
+    border: 1px solid var(--color-line-strong);
     border-radius: var(--radius-md);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent),
-      rgba(12, 15, 20, 0.94);
+    background: var(--color-bg-card);
     box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(14px);
   }
   .summary {
     color: var(--color-text-secondary);
@@ -92,8 +87,9 @@
     background: rgba(255, 255, 255, 0.04);
   }
   .primary {
-    background: linear-gradient(180deg, rgba(201, 144, 76, 0.22), rgba(201, 144, 76, 0.08));
-    border-color: rgba(201, 144, 76, 0.38);
+    background: #2a2118;
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
   }
   .msg {
     grid-column: 1 / -1;

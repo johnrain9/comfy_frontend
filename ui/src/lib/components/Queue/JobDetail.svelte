@@ -149,11 +149,9 @@
     gap: 1rem;
     margin-top: 1rem;
     padding: 1rem;
-    border: 1px solid var(--color-line);
+    border: 1px solid var(--color-line-strong);
     border-radius: calc(var(--radius-lg) - 6px);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent),
-      rgba(10, 12, 16, 0.76);
+    background: var(--color-bg-inset);
   }
   .overview {
     display: grid;
@@ -167,7 +165,7 @@
     padding: 0.85rem 0.95rem;
     border: 1px solid var(--color-line);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--color-bg-panel);
   }
   .meta-grid {
     display: grid;
@@ -222,7 +220,7 @@
   .log-wrap {
     border: 1px solid var(--color-line);
     border-radius: var(--radius-md);
-    background: rgba(6, 7, 10, 0.82);
+    background: #06070a;
     max-height: 280px;
     overflow: auto;
     padding: 0.85rem;

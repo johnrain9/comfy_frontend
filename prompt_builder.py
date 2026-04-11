@@ -387,6 +387,69 @@ def _normalize_output_prefix(output_prefix: str) -> str:
     return PurePosixPath(*parts).as_posix() if parts else ""
 
 
+def _normalize_prompt_mode(raw: Any) -> str:
+    mode = str(raw or "").strip().lower()
+    return mode if mode in {"detail", "creative"} else "detail"
+
+
+def _normalize_prompt_hint(raw: Any) -> str:
+    hint = " ".join(str(raw or "").strip().split())
+    return hint[:240]
+
+
+def _relax_qwen_upscale_positive(base: str) -> str:
+    current = base.strip()
+    target = "Keep all originally visible people fully in frame. Do not zoom in or crop the composition. Preserve original camera distance and framing."
+    replacement = (
+        "Allow tasteful creative reinterpretation of lighting, mood, and composition when it improves the image, "
+        "while keeping the subject recognizable and the scene coherent."
+    )
+    if target in current:
+        return current.replace(target, replacement)
+    if replacement not in current:
+        return f"{current} {replacement}".strip()
+    return current
+
+
+def _relax_qwen_upscale_negative(base: str) -> str:
+    current = base.strip()
+    current = current.replace("framing, camera distance, ", "")
+    current = current.replace("Do not crop any person out of frame. Do not zoom in. ", "")
+    current = current.replace("Do not crop any person out of frame. ", "")
+    current = current.replace("Do not zoom in. ", "")
+    return " ".join(current.split())
+
+
+def _compose_qwen_upscale_prompts(resolved_params: dict[str, Any]) -> tuple[str, str]:
+    positive = str(resolved_params.get("positive_prompt") or "").strip()
+    negative = str(resolved_params.get("negative_prompt") or "").strip()
+    mode = _normalize_prompt_mode(resolved_params.get("prompt_mode"))
+    hint = _normalize_prompt_hint(resolved_params.get("prompt_hint"))
+
+    if mode == "creative":
+        positive = _relax_qwen_upscale_positive(positive)
+        negative = _relax_qwen_upscale_negative(negative)
+        if hint:
+            positive = f"{positive} Creative direction: {hint}".strip()
+    elif hint:
+        positive = f"{positive} Extra detail focus: {hint}".strip()
+
+    return positive, negative
+
+
+def _apply_custom_prompt_composition(prompt: dict[str, Any], workflow_def: WorkflowDef, resolved_params: dict[str, Any]) -> None:
+    if workflow_def.name != "upscale-qwen-image-edit":
+        return
+
+    positive, negative = _compose_qwen_upscale_prompts(resolved_params)
+    for node_id, text in (("10", positive), ("11", negative)):
+        node = prompt.get(node_id)
+        if not isinstance(node, dict):
+            continue
+        inputs = node.setdefault("inputs", {})
+        inputs["prompt"] = text
+
+
 def _set_output_prefix(prompt: dict[str, Any], workflow_def: WorkflowDef, output_prefix: str, stem: str) -> str:
     binding = workflow_def.file_bindings.get("output_prefix")
     if not binding:
@@ -448,6 +511,8 @@ def _apply_param_overrides(prompt: dict[str, Any], workflow_def: WorkflowDef, re
                 continue
             inputs = node.setdefault("inputs", {})
             _set_candidate_field(inputs, pdef.field, pdef.fields, value)
+
+    _apply_custom_prompt_composition(prompt, workflow_def, resolved_params)
 
     def _extra_slot_active(slot_idx: int) -> bool:
         key_base = "extra_lora" if slot_idx == 1 else f"extra_lora{slot_idx}"

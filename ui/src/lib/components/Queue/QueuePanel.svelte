@@ -211,7 +211,8 @@
   }
   .head-copy h3 {
     margin: 0;
-    font-size: 1.4rem;
+    font-size: 1.5rem;
+    font-weight: 700;
     letter-spacing: -0.04em;
   }
   .copy {
@@ -228,9 +229,9 @@
     display: grid;
     gap: 0.22rem;
     padding: 0.8rem 0.85rem;
-    border: 1px solid var(--color-line);
+    border: 1px solid var(--color-line-strong);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--color-bg-card);
   }
   .stat span {
     color: var(--color-text-muted);
@@ -241,6 +242,7 @@
   .stat strong {
     font-size: 1.1rem;
     font-weight: 600;
+    color: var(--color-accent-strong);
   }
   .toolbar {
     display: grid;
@@ -266,9 +268,10 @@
     color: var(--color-text-muted);
   }
   .chips button.active {
-    background: linear-gradient(180deg, rgba(201, 144, 76, 0.22), rgba(201, 144, 76, 0.08));
-    border-color: rgba(201, 144, 76, 0.34);
-    color: var(--color-text);
+    background: #2a2118;
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
+    font-weight: 600;
   }
   .controls {
     display: grid;
@@ -293,9 +296,12 @@
   .list {
     display: grid;
     gap: 0.85rem;
-    max-height: 66vh;
+    max-height: 72vh;
     overflow: auto;
-    padding-right: 0.15rem;
+    padding: 0.75rem;
+    border-radius: var(--radius-md);
+    background: var(--color-bg-inset);
+    border: 1px solid var(--color-line);
   }
   .sel-row {
     display: grid;

@@ -64,125 +64,137 @@
   }
 </script>
 
-<section class="panel p-3" id="health" aria-live="polite">
-  <div class="rail">
-    <div class="snapshot">
-      <p class="eyebrow">System</p>
-      {#if $health}
-        <div class="stats">
-          <div class="stat">
-            <span>Comfy</span>
-            <strong class:up={$health.comfy} class:down={!$health.comfy}>{$health.comfy ? 'Online' : 'Offline'}</strong>
-          </div>
-          <div class="stat">
-            <span>Worker</span>
-            <strong>{$health.worker}</strong>
-          </div>
-          <div class="stat">
-            <span>Pending</span>
-            <strong>{$health.pending}</strong>
-          </div>
-          <div class="stat">
-            <span>Running</span>
-            <strong>{$health.running}</strong>
-          </div>
-        </div>
-      {:else if $healthError}
-        <div class="error">Health error: {$healthError}</div>
-      {:else}
-        <div class="loading">Loading health...</div>
-      {/if}
+<div class="status-strip" id="health" aria-live="polite">
+  {#if $health}
+    <div class="indicators">
+      <div class="ind">
+        <span class="dot" class:dot-up={$health.comfy} class:dot-down={!$health.comfy}></span>
+        <span class="ind-label">Comfy</span>
+        <strong class:up={$health.comfy} class:down={!$health.comfy}>{$health.comfy ? 'Online' : 'Offline'}</strong>
+      </div>
+      <div class="ind">
+        <span class="ind-label">Worker</span>
+        <strong>{$health.worker}</strong>
+      </div>
+      <div class="ind">
+        <span class="ind-label">Pending</span>
+        <strong class="num">{$health.pending}</strong>
+      </div>
+      <div class="ind">
+        <span class="ind-label">Running</span>
+        <strong class="num">{$health.running}</strong>
+      </div>
     </div>
+  {:else if $healthError}
+    <span class="error">{$healthError}</span>
+  {:else}
+    <span class="loading">Connecting...</span>
+  {/if}
 
-    <div class="action-cluster">
-      <button id="pauseBtn" class="btn" on:click={doPause} disabled={actionBusy}>Pause</button>
-      <button id="resumeBtn" class="btn" on:click={doResume} disabled={actionBusy}>Resume</button>
-      <button id="reloadWfBtn" class="btn" on:click={doReloadWf} disabled={actionBusy}>Reload Workflows</button>
-      <button id="reloadLoraBtn" class="btn" on:click={doReloadLoras} disabled={actionBusy}>Reload LoRAs</button>
-      {#if actionMsg}
-        <span class="msg">{actionMsg}</span>
-      {/if}
-    </div>
+  <div class="actions">
+    <button id="pauseBtn" on:click={doPause} disabled={actionBusy}>Pause</button>
+    <button id="resumeBtn" on:click={doResume} disabled={actionBusy}>Resume</button>
+    <button id="reloadWfBtn" on:click={doReloadWf} disabled={actionBusy}>Reload WF</button>
+    <button id="reloadLoraBtn" on:click={doReloadLoras} disabled={actionBusy}>Reload LoRAs</button>
+    {#if actionMsg}
+      <span class="msg">{actionMsg}</span>
+    {/if}
   </div>
-</section>
+</div>
 
 <style>
-  #health {
-    padding: 1rem 1.2rem;
-  }
-  .rail {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 1rem;
-    align-items: end;
-  }
-  .snapshot {
-    display: grid;
-    gap: 0.7rem;
-  }
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(110px, 1fr));
-    gap: 0.7rem;
-  }
-  .stat {
-    display: grid;
-    gap: 0.3rem;
-    padding: 0.8rem 0.9rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-line);
-    background: var(--color-bg-panel-soft);
-  }
-  .stat span {
-    color: var(--color-text-muted);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-  .stat strong {
-    font-size: 1rem;
-    font-weight: 600;
-    letter-spacing: -0.03em;
-  }
-  .up {
-    color: var(--color-succeeded);
-  }
-  .down,
-  .error {
-    color: var(--color-failed);
-  }
-  .loading {
-    color: var(--color-text-secondary);
-  }
-  .action-cluster {
+  .status-strip {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.65rem;
     align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    font-size: 0.8rem;
   }
-  .btn {
-    padding: 0.65rem 0.95rem;
-    border-radius: var(--radius-full);
-    background: rgba(255, 255, 255, 0.04);
+
+  .indicators {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    flex-wrap: wrap;
   }
-  .msg {
-    color: var(--color-text-secondary);
+
+  .ind {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+  }
+
+  .ind-label {
+    color: var(--color-text-muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .ind strong {
+    font-weight: 600;
     font-size: 0.82rem;
   }
 
-  @media (max-width: 1100px) {
-    .rail {
-      grid-template-columns: 1fr;
-    }
-    .action-cluster {
-      justify-content: flex-start;
-    }
+  .num {
+    color: var(--color-accent-strong);
   }
 
-  @media (max-width: 760px) {
-    .stats {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-up {
+    background: var(--color-succeeded);
+  }
+  .dot-down {
+    background: var(--color-failed);
+  }
+
+  .up { color: var(--color-succeeded); }
+  .down, .error { color: var(--color-failed); }
+  .loading { color: var(--color-text-secondary); }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
+    flex-wrap: wrap;
+  }
+
+  .actions button {
+    padding: 0.35rem 0.65rem;
+    border-radius: var(--radius-full);
+    background: transparent;
+    border: 1px solid var(--color-line);
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+  .actions button:hover:not(:disabled) {
+    color: var(--color-text-secondary);
+    border-color: var(--color-line-strong);
+  }
+
+  .msg {
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 900px) {
+    .status-strip {
+      flex-wrap: wrap;
+    }
+    .actions {
+      margin-left: 0;
+      width: 100%;
     }
   }
 </style>

@@ -33,6 +33,63 @@
     return String(job.status || '').toLowerCase();
   }
 
+  interface ParsedParams {
+    prompt: string;
+    negPrompt: string;
+    resolution: string;
+    steps: string;
+    extras: Array<{ key: string; value: string }>;
+  }
+
+  function parseParams(): ParsedParams | null {
+    if (!job.params_json) return null;
+    try {
+      const p = typeof job.params_json === 'string' ? JSON.parse(job.params_json) : job.params_json;
+      if (!p || typeof p !== 'object') return null;
+
+      const prompt = String(p.positive_prompt || p.positive_prompt_stage1 || '');
+      const negPrompt = String(p.negative_prompt || '');
+      const steps = p.steps ? String(p.steps) : '';
+
+      let resolution = '';
+      if (p.resolution_preset) {
+        resolution = String(p.resolution_preset);
+      } else if (p.width && p.height) {
+        resolution = `${p.width}x${p.height}`;
+      }
+
+      const skip = new Set([
+        'positive_prompt', 'negative_prompt', 'positive_prompt_stage1',
+        'positive_prompt_stage2', 'positive_prompt_stage3',
+        'steps', 'resolution_preset', 'width', 'height',
+      ]);
+      const extras: Array<{ key: string; value: string }> = [];
+      for (const [k, v] of Object.entries(p)) {
+        if (skip.has(k) || v === null || v === undefined || v === '') continue;
+        const sv = String(v);
+        if (sv.length > 80) continue;
+        extras.push({ key: k.replace(/_/g, ' '), value: sv });
+      }
+
+      return { prompt, negPrompt, resolution, steps, extras: extras.slice(0, 6) };
+    } catch {
+      return null;
+    }
+  }
+
+  function shortDir(dir: string | null): string {
+    if (!dir) return '';
+    const parts = dir.replace(/\\/g, '/').replace(/\/+$/, '').split('/');
+    return parts.length > 2 ? `.../${parts.slice(-2).join('/')}` : dir;
+  }
+
+  function truncate(text: string, max: number): string {
+    if (text.length <= max) return text;
+    return text.slice(0, max) + '...';
+  }
+
+  $: params = parseParams();
+
   function onKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -132,6 +189,34 @@
       {/if}
     </div>
 
+    {#if params || job.input_dir}
+      <div class="info-section">
+        {#if params?.prompt}
+          <div class="info-line">
+            <span class="info-key">Prompt</span>
+            <span class="info-val prompt-text">{truncate(params.prompt, 140)}</span>
+          </div>
+        {/if}
+        {#if job.input_dir}
+          <div class="info-line">
+            <span class="info-key">Input</span>
+            <span class="info-val mono">{shortDir(job.input_dir)}</span>
+          </div>
+        {/if}
+        <div class="info-chips">
+          {#if params?.resolution}
+            <span class="info-chip"><span class="chip-k">Res</span> {params.resolution}</span>
+          {/if}
+          {#if params?.steps}
+            <span class="info-chip"><span class="chip-k">Steps</span> {params.steps}</span>
+          {/if}
+          {#each params?.extras || [] as extra}
+            <span class="info-chip"><span class="chip-k">{extra.key}</span> {truncate(extra.value, 30)}</span>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <div class="progress-row">
       <div class="progress-copy">
         <span>Progress</span>
@@ -173,7 +258,7 @@
     padding: 1rem 1.05rem;
     border: 1px solid var(--color-line);
     border-radius: var(--radius-lg);
-    background: #0e1117;
+    background: var(--color-bg-panel);
     cursor: pointer;
     box-shadow: var(--shadow-soft);
   }
@@ -195,10 +280,19 @@
       var(--shadow-soft);
   }
   .job-shell[data-status='running'] .job {
-    border-color: rgba(216, 161, 94, 0.24);
+    border-left: 3px solid var(--color-running);
   }
   .job-shell[data-status='failed'] .job {
-    border-color: rgba(216, 118, 134, 0.24);
+    border-left: 3px solid var(--color-failed);
+  }
+  .job-shell[data-status='pending'] .job {
+    border-left: 3px solid var(--color-pending);
+  }
+  .job-shell[data-status='succeeded'] .job {
+    border-left: 3px solid var(--color-succeeded);
+  }
+  .job-shell[data-status='canceled'] .job {
+    border-left: 3px solid var(--color-canceled);
   }
   .top {
     display: grid;
@@ -218,7 +312,7 @@
   }
   .copy strong {
     font-size: 1.18rem;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: -0.03em;
     line-height: 1;
   }
@@ -248,6 +342,64 @@
     font-size: 0.77rem;
     letter-spacing: 0.02em;
   }
+  .info-section {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--radius-md);
+    background: var(--color-bg-inset);
+    border: 1px solid var(--color-line);
+  }
+  .info-line {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: baseline;
+  }
+  .info-key {
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .info-val {
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .prompt-text {
+    color: var(--color-text);
+    font-style: italic;
+  }
+  .info-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.1rem;
+  }
+  .info-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--color-line);
+    background: var(--color-bg-panel);
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+  }
+  .chip-k {
+    color: var(--color-text-muted);
+    font-family: var(--font-sans);
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
   .progress-row {
     display: grid;
     grid-template-columns: auto minmax(180px, 1fr) auto;
@@ -266,7 +418,8 @@
   }
   .progress-copy strong {
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: 700;
+    color: var(--color-accent-strong);
   }
   .bar {
     background: rgba(255, 255, 255, 0.04);

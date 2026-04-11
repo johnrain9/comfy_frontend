@@ -44,14 +44,14 @@ template_inline:
   "10":
     class_type: TextEncodeQwenImageEditPlus
     inputs:
-      prompt: "Enhance this photo while keeping the same person, same face, same body proportions, same pose, same framing, and same background. Preserve identity and realism. Improve sharpness, natural skin texture, fine hair detail, and clean photographic detail. Remove blur, noise, and compression artifacts. Keep it as a realistic professional photo."
+      prompt: "Enhance this photo while keeping the same person, same face, same body proportions, same pose, same framing, and same background. Keep all originally visible people fully in frame. Do not zoom in or crop the composition. Preserve original camera distance and framing. Preserve identity and realism. Improve sharpness, natural skin texture, fine hair detail, and clean photographic detail. Remove blur, noise, and compression artifacts. Keep it as a realistic professional photo."
       clip: ["7", 0]
       vae: ["8", 0]
       image1: ["2", 0]
   "11":
     class_type: TextEncodeQwenImageEditPlus
     inputs:
-      prompt: "Do not change identity, face shape, eyes, nose, mouth, body shape, pose, framing, clothing, or background. No stylization, no beauty filter, no airbrushed skin, no cartoon look, no plastic skin, no glamor retouch, no oversmoothing, no extra limbs, no deformation, no text, no watermark."
+      prompt: "Do not change identity, face shape, eyes, nose, mouth, body shape, pose, framing, camera distance, clothing, or background. Do not crop any person out of frame. Do not zoom in. No stylization, no beauty filter, no airbrushed skin, no cartoon look, no plastic skin, no glamor retouch, no oversmoothing, no extra limbs, no deformation, no text, no watermark."
       clip: ["7", 0]
       vae: ["8", 0]
       image1: ["2", 0]
@@ -78,7 +78,7 @@ template_inline:
       control_after_generate: "randomize"
       # Stable baseline: Q4/no-LoRA/CPU-CLIP with 12 steps.
       steps: 12
-      cfg: 1.0
+      cfg: 3.0
       sampler_name: "euler"
       scheduler: "simple"
       denoise: 1.0
@@ -114,7 +114,15 @@ parameters:
     type: text
     nodes: ["10"]
     field: prompt
-    default: "Enhance this photo while keeping the same person, same face, same body proportions, same pose, same framing, and same background. Preserve identity and realism. Improve sharpness, natural skin texture, fine hair detail, and clean photographic detail. Remove blur, noise, and compression artifacts. Keep it as a realistic professional photo."
+    default: "Enhance this photo while keeping the same person, same face, same body proportions, same pose, same framing, and same background. Keep all originally visible people fully in frame. Do not zoom in or crop the composition. Preserve original camera distance and framing. Preserve identity and realism. Improve sharpness, natural skin texture, fine hair detail, and clean photographic detail. Remove blur, noise, and compression artifacts. Keep it as a realistic professional photo."
+  prompt_mode:
+    label: "Prompt mode"
+    type: text
+    default: "detail"
+  prompt_hint:
+    label: "Prompt hint"
+    type: text
+    default: ""
   scale_multiple:
     label: "Scale multiple"
     type: float
@@ -126,7 +134,7 @@ parameters:
     type: text
     nodes: ["11"]
     field: prompt
-    default: "Do not change identity, face shape, eyes, nose, mouth, body shape, pose, framing, clothing, or background. No stylization, no beauty filter, no airbrushed skin, no cartoon look, no plastic skin, no glamor retouch, no oversmoothing, no extra limbs, no deformation, no text, no watermark."
+    default: "Do not change identity, face shape, eyes, nose, mouth, body shape, pose, framing, camera distance, clothing, or background. Do not crop any person out of frame. Do not zoom in. No stylization, no beauty filter, no airbrushed skin, no cartoon look, no plastic skin, no glamor retouch, no oversmoothing, no extra limbs, no deformation, no text, no watermark."
   width:
     label: "Output width"
     type: int
@@ -156,7 +164,7 @@ parameters:
     type: float
     nodes: ["15"]
     field: cfg
-    default: 1.0
+    default: 3.0
     min: 1.0
     max: 10.0
   denoise:

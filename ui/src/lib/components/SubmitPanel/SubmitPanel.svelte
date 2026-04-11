@@ -736,9 +736,10 @@
     cursor: pointer;
   }
   .tabs button.active {
-    background: linear-gradient(180deg, rgba(201, 144, 76, 0.22), rgba(201, 144, 76, 0.08));
-    border-color: rgba(201, 144, 76, 0.38);
-    color: var(--color-text);
+    background: #2a2118;
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
+    font-weight: 600;
   }
 
   .grid2 {
@@ -814,19 +815,19 @@
   }
 
   .primary {
-    background: linear-gradient(180deg, rgba(201, 144, 76, 0.24), rgba(201, 144, 76, 0.1));
-    border-color: rgba(201, 144, 76, 0.42);
+    background: #2a2118;
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
+    font-weight: 600;
   }
 
   .auto-panel {
     display: grid;
     gap: 0.8rem;
-    border: 1px solid var(--color-line);
+    border: 1px solid var(--color-line-strong);
     border-radius: var(--radius-lg);
     padding: 1rem;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent),
-      rgba(255, 255, 255, 0.02);
+    background: var(--color-bg-inset);
   }
 
   .auto-panel .row {
